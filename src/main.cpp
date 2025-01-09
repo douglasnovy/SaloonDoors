@@ -129,9 +129,9 @@ bool loadSettings() {
     valid &= currentSettings.remoteFireTime > 0 && currentSettings.remoteFireTime < 60;
     valid &= currentSettings.resetLimit > 0 && currentSettings.resetLimit < 60;
     valid &= currentSettings.fireCycle >= 0 && currentSettings.fireCycle < 60;
-    valid &= currentSettings.minGyro > 0 && currentSettings.minGyro < 1000;    // Added
-    valid &= currentSettings.maxGyro > 0 && currentSettings.maxGyro < 2000;    // Added
-    valid &= currentSettings.minGyro < currentSettings.maxGyro;                // Added
+    valid &= currentSettings.minGyro > 0 && currentSettings.minGyro < 1000;
+    valid &= currentSettings.maxGyro > 0 && currentSettings.maxGyro < 2000;
+    valid &= currentSettings.minGyro < currentSettings.maxGyro;
     
     if (!valid) {
         loadDefaultSettings();
