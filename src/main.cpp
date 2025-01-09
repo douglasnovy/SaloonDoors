@@ -4,6 +4,7 @@
 #include <ESP8266WebServer.h>
 #include <Wire.h>
 //#include <math.h>
+#include <EEPROM.h>
 
 
 using namespace std;
@@ -34,7 +35,7 @@ using namespace std;
   int LOCAL_TRIGGER_STATE_2 = 1; // Inititalize the LOCAL 2 trigger state to open
   int TRIGGER_STATE = 0; // Inititalize the trigger state to open
   int FIRE_ON = 0; // Define switch for when fire is active
-  float FIRE_TIMER = 0.0;  //declare a timer variable for the duration of fire output
+  float FIRE_TIMER;  //declare a timer variable for the duration of fire output
   String request = "null";
   int RESET_STATE = 1;
 
@@ -44,20 +45,110 @@ using namespace std;
   int16_t ACCEL_1[9] = {0,0,0,0,0,0,0,0,0}; // Global declare accel 1 and Initialize
   int16_t ACCEL_2[9] = {0,0,0,0,0,0,0,0,0}; // Global declare accel 2 and Initialize
   float AVE_GYRO = 0;
-  float MIN_GYRO = 50; // Degrees per second
-  float MAX_GYRO = 750;  // Degrees per second
+  float MIN_GYRO;  // Degrees per second
+  float MAX_GYRO;  // Degrees per second
   float GYRO_FACTOR;
   float ACCEL_FACTOR;
 
 //  Define Fire control Settings:
-  float MIN_FIRE_TIME = 1.0; // Number of fire seconds corresponding to the MIN_GYRO value
-  float MAX_FIRE_TIME = 6.0; // Number of fire seconds corresponding to the MIN_GYRO value
+  float MIN_FIRE_TIME;  // Number of fire seconds corresponding to the MIN_GYRO value
+  float MAX_FIRE_TIME;  // Number of fire seconds corresponding to the MIN_GYRO value
   float FIRE_TIME_LIMIT = 0.0;  //Initialize fire time
-  float REMOTE_FIRE_TIME = 2.5;  //Define fire time for remote trigger
-  float RESET_LIMIT = 3.0;
-  float RESET_TIMER = RESET_LIMIT;
-  float FIRE_CYCLE = 0.5;  //Define fire time to cycle through both sides
+  float REMOTE_FIRE_TIME;  //Define fire time for remote trigger
+  float RESET_LIMIT;
+  float RESET_TIMER;
+  float FIRE_CYCLE;  //Define fire time to cycle through both sides
   float FIRE_CYCLE_COUNTER = 0.0;  //Define fire time to cycle through both sides
+
+// Add these constants for EEPROM management
+#define EEPROM_SIZE 512
+#define EEPROM_MAGIC_NUMBER 0xAB  // Used to verify if EEPROM has been initialized
+#define EEPROM_MAGIC_ADDR 0
+#define EEPROM_DATA_ADDR 1
+
+// Define a struct to hold all the settings
+struct FireSettings {
+    float minFireTime;
+    float maxFireTime;
+    float remoteFireTime;
+    float resetLimit;
+    float fireCycle;
+    float minGyro;
+    float maxGyro;
+};
+
+// Define the default values as constants
+const FireSettings DEFAULT_SETTINGS = {
+    .minFireTime = 1.0,
+    .maxFireTime = 6.0,
+    .remoteFireTime = 2.5,
+    .resetLimit = 3.0,
+    .fireCycle = 0.5,
+    .minGyro = 50.0,
+    .maxGyro = 750.0
+};
+
+// Global settings variable
+FireSettings currentSettings;
+
+// Add these functions for EEPROM management
+bool saveSettings() {
+    EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_NUMBER);
+    EEPROM.put(EEPROM_DATA_ADDR, currentSettings);
+    if (!EEPROM.commit()) {
+        Serial.println("Error: Failed to commit settings to EEPROM");
+        return false;
+    }
+    return true;
+}
+
+void loadDefaultSettings() {
+    currentSettings = DEFAULT_SETTINGS;
+    // Update global variables
+    MIN_FIRE_TIME = currentSettings.minFireTime;
+    MAX_FIRE_TIME = currentSettings.maxFireTime;
+    REMOTE_FIRE_TIME = currentSettings.remoteFireTime;
+    RESET_LIMIT = currentSettings.resetLimit;
+    FIRE_CYCLE = currentSettings.fireCycle;
+    MIN_GYRO = currentSettings.minGyro;
+    MAX_GYRO = currentSettings.maxGyro;
+}
+
+bool loadSettings() {
+    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_NUMBER) {
+        loadDefaultSettings();
+        return false;
+    }
+    
+    EEPROM.get(EEPROM_DATA_ADDR, currentSettings);
+    
+    // Validate loaded values
+    bool valid = true;
+    valid &= currentSettings.minFireTime > 0 && currentSettings.minFireTime < 60;
+    valid &= currentSettings.maxFireTime > 0 && currentSettings.maxFireTime < 60;
+    valid &= currentSettings.remoteFireTime > 0 && currentSettings.remoteFireTime < 60;
+    valid &= currentSettings.resetLimit > 0 && currentSettings.resetLimit < 60;
+    valid &= currentSettings.fireCycle >= 0 && currentSettings.fireCycle < 60;
+    valid &= currentSettings.minGyro > 0 && currentSettings.minGyro < 1000;    // Added
+    valid &= currentSettings.maxGyro > 0 && currentSettings.maxGyro < 2000;    // Added
+    valid &= currentSettings.minGyro < currentSettings.maxGyro;                // Added
+    
+    if (!valid) {
+        loadDefaultSettings();
+        return false;
+    }
+    
+    // Update global variables
+    MIN_FIRE_TIME = currentSettings.minFireTime;
+    MAX_FIRE_TIME = currentSettings.maxFireTime;
+    REMOTE_FIRE_TIME = currentSettings.remoteFireTime;
+    RESET_LIMIT = currentSettings.resetLimit;
+    FIRE_CYCLE = currentSettings.fireCycle;
+    MIN_GYRO = currentSettings.minGyro;
+    MAX_GYRO = currentSettings.maxGyro;
+    RESET_TIMER = RESET_LIMIT;
+    return true;
+}
 
 // Forward declare the functions:
  // void start_I2C_communication(int);
@@ -229,7 +320,10 @@ String prepare_Fire_Settings_Page()
             "Remote Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='REMOTE_FIRE_TIME'  value= " + REMOTE_FIRE_TIME + "><br><br><br>	 " + 
             "    <input type='submit' style='font-size:300%;color:red' value='UPDATE'>" +
             "  </form>" +
-            "<br>"
+            "<br>" +
+            "<form action='/settings/reset' method='post'>" +
+            "    <input type='submit' style='font-size:300%;color:orange' value='Reset to Defaults'>" +
+            "</form>" +
             "<p><a href='/'>Root Page</a></p>"+
             "<p><a href='/settings'>Settings Control Page</a></p>"+
             "<p><a href='/fire'>Fire Control Page</a></p>"+
@@ -285,28 +379,55 @@ void handle_Data_Page() {
 // This routine is executed when you press submit
 //===============================================================
 void handleForm() {
- MIN_GYRO = server.arg("MIN_GYRO").toFloat(); 
- MAX_GYRO = server.arg("MAX_GYRO").toFloat(); 
- MIN_FIRE_TIME = server.arg("MIN_FIRE_TIME").toFloat(); 
- MAX_FIRE_TIME = server.arg("MAX_FIRE_TIME").toFloat();
- RESET_LIMIT = server.arg("RESET_LIMIT").toFloat(); 
- REMOTE_FIRE_TIME = server.arg("REMOTE_FIRE_TIME").toFloat(); 
- FIRE_CYCLE = server.arg("FIRE_CYCLE").toFloat(); 
- RESET_TIMER = 0;
+    float newMinFireTime = server.arg("MIN_FIRE_TIME").toFloat();
+    float newMaxFireTime = server.arg("MAX_FIRE_TIME").toFloat();
+    float newResetLimit = server.arg("RESET_LIMIT").toFloat();
+    float newRemoteFireTime = server.arg("REMOTE_FIRE_TIME").toFloat();
+    float newFireCycle = server.arg("FIRE_CYCLE").toFloat();
+    float newMinGyro = server.arg("MIN_GYRO").toFloat();
+    float newMaxGyro = server.arg("MAX_GYRO").toFloat();
+    
+    // Validate input values
+    if (newMinFireTime <= 0 || newMaxFireTime <= 0 || 
+        newResetLimit <= 0 || newRemoteFireTime <= 0 || 
+        newFireCycle < 0 || newMinFireTime >= newMaxFireTime ||
+        newMinGyro <= 0 || newMaxGyro <= 0 || 
+        newMinGyro >= newMaxGyro) { 
+        server.send(400, "text/html", "Invalid values provided");
+        return;
+    }
+    
+    // Update global variables
+    MIN_FIRE_TIME = newMinFireTime;
+    MAX_FIRE_TIME = newMaxFireTime;
+    RESET_LIMIT = newResetLimit;
+    REMOTE_FIRE_TIME = newRemoteFireTime;
+    FIRE_CYCLE = newFireCycle;
+    MIN_GYRO = newMinGyro;
+    MAX_GYRO = newMaxGyro;
+    
+    // Update currentSettings struct
+    currentSettings.minFireTime = MIN_FIRE_TIME;
+    currentSettings.maxFireTime = MAX_FIRE_TIME;
+    currentSettings.remoteFireTime = REMOTE_FIRE_TIME;
+    currentSettings.resetLimit = RESET_LIMIT;
+    currentSettings.fireCycle = FIRE_CYCLE;
+    currentSettings.minGyro = MIN_GYRO;
+    currentSettings.maxGyro = MAX_GYRO;
+    
+    // Save to EEPROM
+    if (!saveSettings()) {
+        server.send(500, "text/html", "Failed to save settings");
+        return;
+    }
+    
+    server.send(200, "text/html", prepare_Fire_Settings_Page());
+}
 
- Serial.print("MIN_GYRO:");
- Serial.println(MIN_GYRO);
- 
- Serial.print("MAX_GYRO:");
- Serial.println(MAX_GYRO);
- 
- Serial.print("MIN_FIRE_TIME:");
- Serial.println(MIN_FIRE_TIME);
- 
- Serial.print("MAX_FIRE_TIME:");
- Serial.println(MAX_FIRE_TIME);
-
- handle_Fire_Settings_Page();
+void handleResetDefaults() {
+    loadDefaultSettings();
+    saveSettings();
+    server.send(200, "text/html", prepare_Fire_Settings_Page());
 }
 
 void start_wifi(){
@@ -324,6 +445,8 @@ void start_wifi(){
   server.on("/fire/on", handle_Fire_Control_ON_Page);     //
 
   server.on("/data", handle_Data_Page);      //
+
+  server.on("/settings/reset", HTTP_POST, handleResetDefaults);
 
   server.begin();
   Serial.println();
@@ -513,6 +636,10 @@ void setup() {
   // Configure BUTTON pin as an input with a pullup
     pinMode(MANUAL_TRIGGER_1, INPUT_PULLUP);
     pinMode(MANUAL_TRIGGER_2, INPUT_PULLUP);
+
+  // Initialize EEPROM
+  EEPROM.begin(EEPROM_SIZE);
+  loadSettings();
 }
 
 void loop() {
@@ -617,3 +744,6 @@ void loop() {
   // Wait for next loop
   delay(1000 * LOOP_RATE);  //
 }
+
+// Add near other constants
+static_assert(sizeof(FireSettings) + EEPROM_DATA_ADDR <= EEPROM_SIZE, "FireSettings too large for EEPROM");
