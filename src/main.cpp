@@ -6,6 +6,7 @@
 //#include <math.h>
 #include <EEPROM.h>
 #include <Esp.h>
+#include <DNSServer.h>
 
 
 using namespace std;
@@ -159,15 +160,19 @@ String prepare_Root_Page()
             "<!DOCTYPE HTML>" +
             "<HTML>" +
             "<HEAD>" +
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+            "<meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate'>" +
+            "<meta http-equiv='Pragma' content='no-cache'>" +
+            "<meta http-equiv='Expires' content='0'>" +
             "<TITLE>Saloon Doors Root</TITLE>" +
             "</HEAD>" +
-            "<BODY style='font-size:400%;background-color:black;color:white'>" +
+            "<BODY style='font-size:300%;background-color:black;color:white'>" +
             "<h2>&#128293 <u>HighNoon</u> &#128293</h2>" +
             "<br>" +
-            "<h3><a href='/'>Root Page</a></h3>" +
-            "<h3><a href='/settings'>Settings Control Page</a></h3>" +
-            "<h3><a href='/fire'>Fire Control Page</a></h3>" +
-            "<h3><a href='/data'>Data Page</a></h3>" +
+            "<p><a href='/'>Root Page</a></p>" +
+            "<p><a href='/settings'>Settings Control Page</a></p>" +
+            "<p><a href='/fire'>Fire Control Page</a></p>" +
+            "<p><a href='/data'>Data Page</a></p>" +
             "</BODY>" +
             "</HTML>";
           
@@ -209,7 +214,7 @@ String prepare_Data_Page()
             "});" +
             "</script>" +
             "</HEAD>" +
-            "<BODY style='font-size:200%;background-color:black;color:white'>" +
+            "<BODY style='font-size:300%;background-color:black;color:white'>" +
             "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span></h3>" +
             "<h3>Reset Limit [sec]: <span id='resetLimit'>" + String(RESET_LIMIT, 2) + "</span></h3>" +
             "<h3>Reset State: <span id='resetState'>" + RESET_STATE + "</span></h3>" +
@@ -250,10 +255,10 @@ String prepare_Fire_Control_Page() {
     htmlPage += "    text-align: center;";
     htmlPage += "    text-decoration: none;";
     htmlPage += "    display: inline-block;";
-    htmlPage += "    font-size: 200px;";
+    htmlPage += "    font-size: 150px;";
     htmlPage += "    margin: 4px 2px;";
     htmlPage += "    cursor: pointer;";
-    htmlPage += "    transition: background-color 0.3s;";  // Smooth transition for color changes
+    htmlPage += "    transition: background-color 0.3s;";
     htmlPage += "  }";
     htmlPage += "</style>";
     htmlPage += "<script>";
@@ -307,7 +312,7 @@ String prepare_Fire_Control_Page() {
     htmlPage += "});";
     htmlPage += "</script>";
     htmlPage += "</HEAD>";
-    htmlPage += "<BODY style='font-size:400%;background-color:black;color:white'>";
+    htmlPage += "<BODY style='font-size:300%;background-color:black;color:white'>";
     htmlPage += "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span> / " + String(RESET_LIMIT, 2) + "</h3>";
     htmlPage += "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(FIRE_TIMER, 2) + "</span> / <span id='fireTimeLimit'>" + String(FIRE_TIME_LIMIT, 2) + "</span></h3>";
     htmlPage += "<br>";
@@ -579,9 +584,50 @@ void handle_Fire_Status() {
     server.send(200, "application/json", json);
 }
 
+// Add these constants with other defines
+#define DNS_PORT 53
+
+// Add this global variable with other globals
+DNSServer dnsServer;
+
+void handleNotFound() {
+    String ip = WiFi.softAPIP().toString();
+    String url = "http://" + ip;
+    String html = String("") +
+        "<!DOCTYPE html>" +
+        "<html>" +
+        "<head>" +
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+        "<style>" +
+        "body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background-color: black; color: white; }" +
+        ".button { background-color: #4CAF50; border: none; color: white; padding: 15px 32px; " +
+        "text-align: center; text-decoration: none; display: inline-block; font-size: 16px; " +
+        "margin: 4px 2px; cursor: pointer; border-radius: 4px; }" +
+        ".info { background-color: #333; padding: 15px; border-radius: 4px; margin: 20px auto; max-width: 600px; }" +
+        "</style>" +
+        "</head>" +
+        "<body>" +
+        "<h1>&#128293; HighNoon Saloon Doors &#128293;</h1>" +
+        "<div class='info'>" +
+        "<p>To access the control panel, either:</p>" +
+        "<p>1. Click the button below</p>" +
+        "<p>2. Or open your browser and go to: <br><strong>" + url + "</strong></p>" +
+        "</div>" +
+        "<a class='button' href='" + url + "'>Open Control Panel</a>" +
+        "<p style='margin-top: 20px; color: #888;'><small>Bookmark the control panel for easy access!</small></p>" +
+        "</body>" +
+        "</html>";
+    
+    server.send(200, "text/html", html);
+}
+
 void start_wifi(){
   WiFi.mode(WIFI_AP);
   WiFi.softAP("HighNoon", "shaboinky", 1, 0, 8);
+  
+  // Configure DNS server to redirect all domains to our IP
+  IPAddress apIP = WiFi.softAPIP();
+  dnsServer.start(DNS_PORT, "*", apIP);
   
   // Add WiFi power management
   WiFi.setOutputPower(20.5); // Max WiFi power
@@ -598,7 +644,7 @@ void start_wifi(){
   // Instead, add CORS headers to your request handlers
   server.onNotFound([]() {
       server.sendHeader("Access-Control-Allow-Origin", "*");
-      server.send(404, "text/plain", "Not found");
+      handleNotFound();
   });
 
   // Add CORS headers to your existing handlers
@@ -607,17 +653,21 @@ void start_wifi(){
       handleRoot();
   });
 
-  // Fire Control endpoints
+  // Add special URLs that mobile devices check for captive portals
+  server.on("/generate_204", handleNotFound);  // Android
+  server.on("/fwlink", handleNotFound);        // Microsoft
+  server.on("/redirect", handleNotFound);      // Apple
+  server.on("/hotspot-detect.html", handleNotFound); // Apple
+  server.on("/canonical.html", handleNotFound); // Apple
+  server.on("/success.txt", handleNotFound);    // Apple
+  
+  // Your existing endpoints...
   server.on("/fire", HTTP_GET, handle_Fire_Control_Page);
   server.on("/fire/on", HTTP_GET, handle_Fire_Control_ON_Page);
   server.on("/fire/status", HTTP_GET, handle_Fire_Status);
-
-  // Settings endpoints
   server.on("/settings", HTTP_GET, handle_Fire_Settings_Page);
   server.on("/settings/action_page", HTTP_POST, handle_Settings_Update);
   server.on("/settings/reset", HTTP_POST, handle_Settings_Reset);
-
-  // Data endpoints
   server.on("/data", HTTP_GET, handle_Data_Page);
   server.on("/data/status", HTTP_GET, handle_Data_Status);
 
@@ -814,6 +864,8 @@ void setup() {
 }
 
 void loop() {
+  dnsServer.processNextRequest();
+  
   static unsigned long lastUpdate = 0;
   const unsigned long updateInterval = LOOP_RATE * 1000; // Convert to milliseconds
   
