@@ -93,6 +93,89 @@ const FireSettings DEFAULT_SETTINGS = {
 // Global settings variable
 FireSettings currentSettings;
 
+// Add after FireSettings struct
+struct SystemStats {
+    // Core stats
+    unsigned long remoteTriggersCount;
+    unsigned long accelTriggersCount;
+    float highestAccelReading;
+    float totalFireTime;  // in seconds
+    
+    // Additional stats
+    float longestFireDuration;      // longest single fire event in seconds
+    float averageAccelTrigger;      // running average of trigger acceleration
+    float peakMemoryUsage;          // percentage of memory used (0-100%)
+};
+
+// Add with other constants
+const SystemStats DEFAULT_STATS = {
+    .remoteTriggersCount = 0,
+    .accelTriggersCount = 0,
+    .highestAccelReading = 0.0,
+    .totalFireTime = 0.0,
+    .longestFireDuration = 0.0,
+    .averageAccelTrigger = 0.0,
+    .peakMemoryUsage = 0.0
+};
+
+// Add with other globals
+SystemStats currentStats;
+
+// Add these globals near the top with other globals
+unsigned long fireStartTime = 0;  // To track duration of current fire event
+
+// Modify the function that starts the fire (where FIRE_ON is set to true)
+void startFire() {
+    FIRE_ON = true;
+    fireStartTime = millis();  // Record start time when fire begins
+    currentStats.remoteTriggersCount++;  // If this is a remote trigger
+    saveStats();
+}
+
+// Modify the function that stops the fire
+void stopFire() {
+    if (FIRE_ON) {
+        FIRE_ON = false;
+        // Calculate fire duration and update stats
+        float fireDuration = (millis() - fireStartTime) / 1000.0;  // Convert to seconds
+        if (fireDuration > currentStats.longestFireDuration) {
+            currentStats.longestFireDuration = fireDuration;
+            saveStats();
+        }
+    }
+}
+
+// Add these functions after the FireSettings functions
+bool saveStats() {
+    EEPROM.put(EEPROM_DATA_ADDR + sizeof(FireSettings), currentStats);
+    if (!EEPROM.commit()) {
+        Serial.println("Error: Failed to commit stats to EEPROM");
+        return false;
+    }
+    return true;
+}
+
+void loadDefaultStats() {
+    currentStats = DEFAULT_STATS;
+}
+
+bool loadStats() {
+    EEPROM.get(EEPROM_DATA_ADDR + sizeof(FireSettings), currentStats);
+    
+    // Basic validation
+    bool valid = true;
+    valid &= currentStats.remoteTriggersCount < 1000000;  // Reasonable maximum
+    valid &= currentStats.accelTriggersCount < 1000000;
+    valid &= currentStats.highestAccelReading >= 0 && currentStats.highestAccelReading < 10000;
+    valid &= currentStats.totalFireTime >= 0 && currentStats.totalFireTime < 1000000;
+    
+    if (!valid) {
+        loadDefaultStats();
+        return false;
+    }
+    return true;
+}
+
 // Add these functions for EEPROM management
 bool saveSettings() {
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_NUMBER);
@@ -173,6 +256,7 @@ String prepare_Root_Page()
             "<p><a href='/settings'>Settings Control Page</a></p>" +
             "<p><a href='/fire'>Fire Control Page</a></p>" +
             "<p><a href='/data'>Data Page</a></p>" +
+            "<p><a href='/stats'>Statistics Page</a></p>" +
             "</BODY>" +
             "</HTML>";
           
@@ -398,6 +482,81 @@ String prepare_Fire_Settings_Page()
     return htmlPage;
 }
 
+// Add new page preparation function
+String prepare_Stats_Page() {
+    String htmlPage;
+    htmlPage.reserve(2048);
+    
+    htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
+    htmlPage += "<TITLE>System Statistics</TITLE>";
+    htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<style>";
+    htmlPage += "body { font-size:300%; background-color:black; color:white; }";
+    htmlPage += ".stat-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
+    htmlPage += ".reset-btn { background-color:#ff4444; color:white; padding:15px; border:none; border-radius:5px; font-size:100%; cursor:pointer; }";
+    htmlPage += "</style>";
+    htmlPage += "<script>";
+    htmlPage += "function resetStats() {";
+    htmlPage += "  if(confirm('Reset all statistics to zero?')) {";
+    htmlPage += "    fetch('/stats/reset', {method:'POST'})";
+    htmlPage += "    .then(response => {";
+    htmlPage += "      if(response.ok) {";
+    htmlPage += "        alert('Statistics reset successfully');";
+    htmlPage += "        location.reload();";
+    htmlPage += "      }";
+    htmlPage += "    });";
+    htmlPage += "  }";
+    htmlPage += "}";
+    htmlPage += "</script>";
+    htmlPage += "</HEAD><BODY>";
+    
+    htmlPage += "<h2>System Statistics</h2>";
+    htmlPage += "<div class='stat-box'>";
+    htmlPage += "<h3>Trigger Statistics</h3>";
+    htmlPage += "<p>Remote Triggers: " + String(currentStats.remoteTriggersCount) + "</p>";
+    htmlPage += "<p>Accelerometer Triggers: " + String(currentStats.accelTriggersCount) + "</p>";
+    
+    htmlPage += "<h3>Acceleration Data</h3>";
+    htmlPage += "<p>Highest Acceleration: " + String(currentStats.highestAccelReading, 2) + " g</p>";
+    htmlPage += "<p>Average Trigger Acceleration: " + String(currentStats.averageAccelTrigger, 2) + " g</p>";
+    
+    htmlPage += "<h3>Fire Duration</h3>";
+    // Convert total fire time to hours:minutes:seconds
+    unsigned long totalSeconds = (unsigned long)currentStats.totalFireTime;
+    unsigned long hours = totalSeconds / 3600;
+    unsigned long minutes = (totalSeconds % 3600) / 60;
+    unsigned long seconds = totalSeconds % 60;
+    
+    htmlPage += "<p>Total Fire Time: " + String(hours) + "h " + String(minutes) + "m " + String(seconds) + "s</p>";
+    htmlPage += "<p>Longest Single Fire: " + String(currentStats.longestFireDuration, 1) + " seconds</p>";
+    
+    htmlPage += "<h3>System Resources</h3>";
+    htmlPage += "<p>Peak Memory Usage: " + String(currentStats.peakMemoryUsage, 1) + "%</p>";
+    htmlPage += "</div>";
+    
+    htmlPage += "<button class='reset-btn' onclick='resetStats()'>Reset Statistics</button>";
+    htmlPage += "<br><br>";
+    htmlPage += "<p><a href='/'>Root Page</a></p>";
+    htmlPage += "</BODY></HTML>";
+    
+    return htmlPage;
+}
+
+// Add these handler functions before they're used in server.on()
+
+void handle_Stats_Reset() {
+    loadDefaultStats();
+    if (!saveStats()) {
+        server.send(500, "text/plain", "Failed to reset statistics");
+        return;
+    }
+    server.send(200, "text/plain", "Statistics reset successfully");
+}
+
+void handle_Stats_Page() {
+    server.send(200, "text/html", prepare_Stats_Page());
+}
+
 //===============================================================
 // This routine is executed when you open its IP in browser
 //===============================================================
@@ -417,22 +576,19 @@ void handle_Fire_Control_Page() {
 // This routine is executed when you trigger the FIRE on the control page
 //===============================================================
 void handle_Fire_Control_ON_Page() {
-    // Add protection against multiple rapid clicks
     static unsigned long lastFireTime = 0;
     unsigned long currentTime = millis();
     
-    if (currentTime - lastFireTime < 1000) { // Prevent multiple triggers within 1 second
+    if (currentTime - lastFireTime < 1000) {
         server.send(429, "text/plain", "Too many requests");
         return;
     }
     
-    // Set the fire state
-    REMOTE_TRIGGER_STATE = 0;  // Trigger the fire
-    FIRE_ON = 1;  // Set fire state to active
-    FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;  // Set the fire duration
-    FIRE_TIMER = 0;  // Reset the fire timer
-    RESET_TIMER = 0;  // Reset the reset timer
-    RESET_STATE = 0;  // Disable reset state while firing
+    startFire();
+    FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;
+    FIRE_TIMER = 0;
+    RESET_TIMER = 0;
+    RESET_STATE = 0;
     
     lastFireTime = currentTime;
     server.send(200, "text/plain", "OK");
@@ -670,6 +826,14 @@ void start_wifi(){
   server.on("/settings/reset", HTTP_POST, handle_Settings_Reset);
   server.on("/data", HTTP_GET, handle_Data_Page);
   server.on("/data/status", HTTP_GET, handle_Data_Status);
+  server.on("/stats", HTTP_GET, []() {
+      server.sendHeader("Access-Control-Allow-Origin", "*");
+      handle_Stats_Page();
+  });
+  server.on("/stats/reset", HTTP_POST, []() {
+      server.sendHeader("Access-Control-Allow-Origin", "*");
+      handle_Stats_Reset();
+  });
 
   server.begin();
   Serial.println("Web server started");
@@ -677,6 +841,8 @@ void start_wifi(){
   Serial.print("MAC: "); Serial.println(WiFi.softAPmacAddress());
 }
 
+static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROM_DATA_ADDR <= EEPROM_SIZE, 
+    "Combined settings and stats too large for EEPROM");
 
 /**
  * This routine turns off the I2C bus and clears it
@@ -861,6 +1027,7 @@ void setup() {
   // Initialize EEPROM
   EEPROM.begin(EEPROM_SIZE);
   loadSettings();
+  loadStats();
 }
 
 void loop() {
@@ -884,15 +1051,13 @@ void loop() {
       
       // Fire control logic
       if (FIRE_ON) {
-          // Update fire pins
           digitalWrite(FIRE_PIN_1, HIGH);
           digitalWrite(FIRE_PIN_2, HIGH);
           
-          // Check if fire duration is complete
           if (FIRE_TIMER >= FIRE_TIME_LIMIT) {
-              FIRE_ON = 0;
+              stopFire();
               FIRE_TIMER = 0;
-              RESET_STATE = 1;  // Enable reset state after firing
+              RESET_STATE = 1;
               digitalWrite(FIRE_PIN_1, LOW);
               digitalWrite(FIRE_PIN_2, LOW);
           }
@@ -908,6 +1073,21 @@ void loop() {
       if (RESET_STATE) {
           RESET_TIMER += LOOP_RATE;
       }
+      
+      // Track highest acceleration
+      float currentAccel1 = ACCEL_1[7];  // Using magnitude of acceleration
+      float currentAccel2 = ACCEL_2[7];
+      float maxCurrentAccel = max(currentAccel1, currentAccel2);
+      if (maxCurrentAccel > currentStats.highestAccelReading) {
+          currentStats.highestAccelReading = maxCurrentAccel;
+          saveStats();
+      }
+      
+      // Track fire time
+      if (FIRE_ON) {
+          currentStats.totalFireTime += LOOP_RATE;
+          saveStats();
+      }
   }
   
   // Small delay to prevent WiFi issues
@@ -915,4 +1095,5 @@ void loop() {
 }
 
 // Add near other constants
-static_assert(sizeof(FireSettings) + EEPROM_DATA_ADDR <= EEPROM_SIZE, "FireSettings too large for EEPROM");
+static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROM_DATA_ADDR <= EEPROM_SIZE, 
+    "Combined settings and stats too large for EEPROM");
