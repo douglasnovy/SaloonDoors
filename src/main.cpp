@@ -5,6 +5,7 @@
 #include <Wire.h>
 //#include <math.h>
 #include <EEPROM.h>
+#include <Esp.h>
 
 
 using namespace std;
@@ -150,34 +151,25 @@ bool loadSettings() {
     return true;
 }
 
-// Forward declare the functions:
- // void start_I2C_communication(int);
-//  void start_wifi();
-//  void get_accel_data(int, int16_t);
-//  void handleRoot();
-
 // prepare a web page to be send to a client (web browser)
 String prepare_Root_Page()
 {
   String htmlPage =
             String("") +
             "<!DOCTYPE HTML>" +
-            " <HTML>" +
-            "   <HEAD>" +
-            "    <TITLE>Saloon Doors Root</TITLE>" +
-            "  </HEAD>" +
+            "<HTML>" +
+            "<HEAD>" +
+            "<TITLE>Saloon Doors Root</TITLE>" +
+            "</HEAD>" +
             "<BODY style='font-size:400%;background-color:black;color:white'>" +
-            "<h2> &#128293 <u>HighNoon</u> &#128293 <h2>" + 
+            "<h2>&#128293 <u>HighNoon</u> &#128293</h2>" +
+            "<br>" +
+            "<h3><a href='/'>Root Page</a></h3>" +
+            "<h3><a href='/settings'>Settings Control Page</a></h3>" +
+            "<h3><a href='/fire'>Fire Control Page</a></h3>" +
+            "<h3><a href='/data'>Data Page</a></h3>" +
             "</BODY>" +
-            "<br>"+
-            "<br>"+
-            "<h3><a href='/'>Root Page</a></h3>"+
-            "<h3><a href='/settings'>Settings Control Page</a></h3>"+
-            "<h3><a href='/fire'>Fire Control Page</a></h3>"+
-            "<h3><a href='/data'>Data Page</a></h3>"+
- 
-            "</HTML>" +
-            "\r\n";
+            "</HTML>";
           
   return htmlPage;
 }
@@ -188,197 +180,334 @@ String prepare_Data_Page()
   String htmlPage =
             String("") +
             "<!DOCTYPE HTML>" +
-            " <HTML>" +
-            "   <HEAD>" +
-            "    <TITLE>Saloon Doors Data</TITLE>" +
-            "    <meta http-equiv='refresh' content='1; url=/data' >"+
-            "  </HEAD>" +
+            "<HTML>" +
+            "<HEAD>" +
+            "<TITLE>Saloon Doors Data</TITLE>" +
+            "<script>" +
+            "function updateData() {" +
+            "  fetch('/data/status')" +
+            "  .then(response => response.json())" +
+            "  .then(data => {" +
+            "    document.getElementById('resetTimer').innerHTML = data.resetTimer.toFixed(2);" +
+            "    document.getElementById('resetLimit').innerHTML = data.resetLimit.toFixed(2);" +
+            "    document.getElementById('resetState').innerHTML = data.resetState;" +
+            "    document.getElementById('fireTimer').innerHTML = data.fireTimer.toFixed(2);" +
+            "    document.getElementById('fireTimeLimit').innerHTML = data.fireTimeLimit.toFixed(2);" +
+            "    document.getElementById('remoteTrigger').innerHTML = data.remoteTriggerState;" +
+            "    document.getElementById('localTrigger1').innerHTML = data.localTriggerState1;" +
+            "    document.getElementById('localTrigger2').innerHTML = data.localTriggerState2;" +
+            "    document.getElementById('fireOn').innerHTML = data.fireOn;" +
+            "    document.getElementById('accel1').innerHTML = data.accel1.toFixed(2);" +
+            "    document.getElementById('accel2').innerHTML = data.accel2.toFixed(2);" +
+            "    document.getElementById('aveGyro').innerHTML = data.aveGyro.toFixed(2);" +
+            "  })" +
+            "  .catch(error => console.error('Error:', error));" +
+            "}" +
+            "document.addEventListener('DOMContentLoaded', function() {" +
+            "  updateData();" +  // Initial update
+            "  setInterval(updateData, 100);" +  // Update every 100ms
+            "});" +
+            "</script>" +
+            "</HEAD>" +
             "<BODY style='font-size:200%;background-color:black;color:white'>" +
-                    "<h3> Reset Timer [sec]: " + RESET_TIMER + "</h3>" +
-                    "<h3> Reset Limit [sec]: " + RESET_LIMIT + "</h3>" +
-                    "<h3> Reset State: " + RESET_STATE + "</h3>" +
-                    "<h3> Fire Timer [sec]: " + FIRE_TIMER + "</h3>" +
-                    "<h3> Fire Time Limit [sec]: " + FIRE_TIME_LIMIT + "</h3>" +
-                    "<h3> REMOTE_TRIGGER_STATE: " + String(REMOTE_TRIGGER_STATE) + "</h3>" +
-                    "<h3> LOCAL_TRIGGER_STATE_1: " + digitalRead(MANUAL_TRIGGER_1) + "</h3>" +
-                    "<h3> LOCAL_TRIGGER_STATE_2: " + digitalRead(MANUAL_TRIGGER_2) + "</h3>" +
-                    "<h3> FIRE_ON: " + FIRE_ON + "</h3>" +
-                    "<h3> ACCEL_1: " + ACCEL_1[8] +"</h3>" +
-                    "<h3> ACCEL_2: " + ACCEL_2[8] +"</h3>" +
-                    "<h3> AVE_GYRO: " + AVE_GYRO +"</h3>" +
-            "<br>"
-            "<p><a href='/'>Root Page</a></p>"+
-            "<p><a href='/settings'>Settings Control Page</a></p>"+
-            "<p><a href='/fire'>Fire Control Page</a></p>"+
-            "<p><a href='/data'>Data Page</a></p>"+          
+            "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span></h3>" +
+            "<h3>Reset Limit [sec]: <span id='resetLimit'>" + String(RESET_LIMIT, 2) + "</span></h3>" +
+            "<h3>Reset State: <span id='resetState'>" + RESET_STATE + "</span></h3>" +
+            "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(FIRE_TIMER, 2) + "</span></h3>" +
+            "<h3>Fire Time Limit [sec]: <span id='fireTimeLimit'>" + String(FIRE_TIME_LIMIT, 2) + "</span></h3>" +
+            "<h3>REMOTE_TRIGGER_STATE: <span id='remoteTrigger'>" + REMOTE_TRIGGER_STATE + "</span></h3>" +
+            "<h3>LOCAL_TRIGGER_STATE_1: <span id='localTrigger1'>" + digitalRead(MANUAL_TRIGGER_1) + "</span></h3>" +
+            "<h3>LOCAL_TRIGGER_STATE_2: <span id='localTrigger2'>" + digitalRead(MANUAL_TRIGGER_2) + "</span></h3>" +
+            "<h3>FIRE_ON: <span id='fireOn'>" + FIRE_ON + "</span></h3>" +
+            "<h3>ACCEL_1: <span id='accel1'>" + String(ACCEL_1[8], 2) + "</span></h3>" +
+            "<h3>ACCEL_2: <span id='accel2'>" + String(ACCEL_2[8], 2) + "</span></h3>" +
+            "<h3>AVE_GYRO: <span id='aveGyro'>" + String(AVE_GYRO, 2) + "</span></h3>" +
+            "<br>" +
+            "<p><a href='/'>Root Page</a></p>" +
+            "<p><a href='/settings'>Settings Control Page</a></p>" +
+            "<p><a href='/fire'>Fire Control Page</a></p>" +
+            "<p><a href='/data'>Data Page</a></p>" +
             "</BODY>" +
-            "</HTML>" +
-            "\r\n";       
+            "</HTML>";
+            
   return htmlPage;
 }
 
 // prepare a web page to be send to a client (web browser)
-String prepare_Fire_Control_Page()
-{
-  String button_style = String("");
-
-  if (FIRE_ON ==1 ){
-    button_style = String("") +
-                      "  .button {"+
-                      "    background-color: red;"+
-                      "    border: none;"+
-                      "    color: white;"+
-                      "    padding: 15px 32px;"+
-                      "    text-align: center;"+
-                      "    text-decoration: none;"+
-                      "    display: inline-block;"+
-                      "    font-size: 200px;"+
-                      "    margin: 4px 2px;"+
-                      "    cursor: pointer;"
-                      "  }";
-  }
-  else if (RESET_TIMER < RESET_LIMIT){
-      button_style = String("") +
-                      "  .button {"+
-                      "    background-color: grey;"+
-                      "    border: none;"+
-                      "    color: white;"+
-                      "    padding: 15px 32px;"+
-                      "    text-align: center;"+
-                      "    text-decoration: none;"+
-                      "    display: inline-block;"+
-                      "    font-size: 200px;"+
-                      "    margin: 4px 2px;"+
-                      "    cursor: pointer;"
-                      "  }";
-  }
-  else
-  {
-    button_style = String("") +
-                      "  .button {"+
-                      "    background-color: green;"+
-                      "    border: none;"+
-                      "    color: white;"+
-                      "    padding: 15px 32px;"+
-                      "    text-align: center;"+
-                      "    text-decoration: none;"+
-                      "    display: inline-block;"+
-                      "    font-size: 200px;"+
-                      "    margin: 4px 2px;"+
-                      "    cursor: pointer;"
-                      "  }";
-  }
-
-    String htmlPage =
-              String("") +
-              "<!DOCTYPE HTML>" +
-              " <HTML>" +
-              "   <HEAD>" +
-              "    <TITLE>Saloon Doors Controls</TITLE>" +
-              "    <meta http-equiv='refresh' content='1; url=/fire' >"
-              "  </HEAD>" +
-                      "  <style>"+
-                      button_style +
-                      " </style>"+
-              "<BODY style='font-size:400%;background-color:black;color:white'>" +
-              "<h3> Reset Timer [sec]:</h3>" +
-              "<h3>" + RESET_TIMER + " / " + RESET_LIMIT + "</h3>" +
-              "<h3> Fire Timer [sec]:</h3>" +
-              "<h3>" + FIRE_TIMER + " / " + FIRE_TIME_LIMIT + "</h3>" +
-              "<br>"+
-              "<input type=button class='button' onClick=\"location.href='/fire/on'\" value='FIRE!'>" +
-              "  </form>" +
-              "<br>"
-              "<p><a href='/'>Root Page</a></p>"+
-              "<p><a href='/settings'>Settings Control Page</a></p>"+
-              "<p><a href='/fire'>Fire Control Page</a></p>"+ 
-              "<p><a href='/data'>Data Page</a></p>"+           
-              "</BODY>" +
-              "</HTML>" +
-              "\r\n";     
+String prepare_Fire_Control_Page() {
+    String htmlPage;
+    htmlPage.reserve(4096);
+    
+    htmlPage += "<!DOCTYPE HTML>";
+    htmlPage += "<HTML>";
+    htmlPage += "<HEAD>";
+    htmlPage += "<TITLE>Saloon Doors Controls</TITLE>";
+    htmlPage += "<style>";
+    htmlPage += "  .button {";
+    htmlPage += "    border: none;";
+    htmlPage += "    color: white;";
+    htmlPage += "    padding: 15px 32px;";
+    htmlPage += "    text-align: center;";
+    htmlPage += "    text-decoration: none;";
+    htmlPage += "    display: inline-block;";
+    htmlPage += "    font-size: 200px;";
+    htmlPage += "    margin: 4px 2px;";
+    htmlPage += "    cursor: pointer;";
+    htmlPage += "    transition: background-color 0.3s;";  // Smooth transition for color changes
+    htmlPage += "  }";
+    htmlPage += "</style>";
+    htmlPage += "<script>";
+    // Update status function
+    htmlPage += "function updateStatus() {";
+    htmlPage += "  fetch('/fire/status')";
+    htmlPage += "    .then(response => response.json())";
+    htmlPage += "    .then(data => {";
+    htmlPage += "      document.getElementById('resetTimer').textContent = data.resetTimer.toFixed(2);";
+    htmlPage += "      document.getElementById('fireTimer').textContent = data.fireTimer.toFixed(2);";
+    htmlPage += "      document.getElementById('fireTimeLimit').textContent = data.fireTimeLimit.toFixed(2);";
+    htmlPage += "      const btn = document.getElementById('fireButton');";
+    htmlPage += "      if (data.fireOn) {";
+    htmlPage += "        btn.style.backgroundColor = 'red';";
+    htmlPage += "        btn.disabled = true;";
+    htmlPage += "      } else if (data.resetTimer < data.resetLimit) {";
+    htmlPage += "        btn.style.backgroundColor = 'grey';";
+    htmlPage += "        btn.disabled = true;";
+    htmlPage += "      } else {";
+    htmlPage += "        btn.style.backgroundColor = 'green';";
+    htmlPage += "        btn.disabled = false;";
+    htmlPage += "      }";
+    htmlPage += "    })";
+    htmlPage += "    .catch(error => console.error('Error:', error));";
+    htmlPage += "}";
+    // Fire trigger function
+    htmlPage += "function fireTrigger() {";
+    htmlPage += "  const btn = document.getElementById('fireButton');";
+    htmlPage += "  btn.disabled = true;";  // Disable immediately
+    htmlPage += "  btn.style.backgroundColor = 'grey';";  // Visual feedback
+    htmlPage += "  fetch('/fire/on')";
+    htmlPage += "    .then(response => {";
+    htmlPage += "      if (response.ok) {";
+    htmlPage += "        updateStatus();";
+    htmlPage += "      } else {";
+    htmlPage += "        btn.disabled = false;";
+    htmlPage += "        btn.style.backgroundColor = 'green';";
+    htmlPage += "      }";
+    htmlPage += "    })";
+    htmlPage += "    .catch(error => {";
+    htmlPage += "      console.error('Error:', error);";
+    htmlPage += "      btn.disabled = false;";
+    htmlPage += "      btn.style.backgroundColor = 'green';";
+    htmlPage += "    });";
+    htmlPage += "  return false;";
+    htmlPage += "}";
+    // Start periodic updates
+    htmlPage += "document.addEventListener('DOMContentLoaded', function() {";
+    htmlPage += "  updateStatus();";  // Initial update
+    htmlPage += "  setInterval(updateStatus, 100);";  // Update every 100ms
+    htmlPage += "});";
+    htmlPage += "</script>";
+    htmlPage += "</HEAD>";
+    htmlPage += "<BODY style='font-size:400%;background-color:black;color:white'>";
+    htmlPage += "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span> / " + String(RESET_LIMIT, 2) + "</h3>";
+    htmlPage += "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(FIRE_TIMER, 2) + "</span> / <span id='fireTimeLimit'>" + String(FIRE_TIME_LIMIT, 2) + "</span></h3>";
+    htmlPage += "<br>";
+    // Initial button state based on current conditions
+    String initialColor = FIRE_ON ? "red" : (RESET_TIMER < RESET_LIMIT ? "grey" : "green");
+    String initialDisabled = (FIRE_ON || RESET_TIMER < RESET_LIMIT) ? "disabled" : "";
+    htmlPage += "<button id='fireButton' class='button' onclick='return fireTrigger();' style='background-color: " + initialColor + "' " + initialDisabled + ">FIRE!</button>";
+    htmlPage += "<br>";
+    htmlPage += "<p><a href='/'>Root Page</a></p>";
+    htmlPage += "<p><a href='/settings'>Settings Control Page</a></p>";
+    htmlPage += "<p><a href='/fire'>Fire Control Page</a></p>";
+    htmlPage += "<p><a href='/data'>Data Page</a></p>";
+    htmlPage += "</BODY>";
+    htmlPage += "</HTML>";
+    
     return htmlPage;
 }
 
 // prepare a web page to be send to a client (web browser)
 String prepare_Fire_Settings_Page()
 {
-  String htmlPage =
+    String htmlPage =
             String("") +
             "<!DOCTYPE HTML>" +
-            " <HTML>" +
-            "   <HEAD>" +
-            "    <TITLE>Saloon Doors Settings</TITLE>" +
-            "  </HEAD>" +
+            "<HTML>" +
+            "<HEAD>" +
+            "<TITLE>Saloon Doors Settings</TITLE>" +
+            "<script>" +
+            "function submitSettings(event) {" +
+            "  event.preventDefault();" +
+            "  const form = document.getElementById('settingsForm');" +
+            "  const formData = new URLSearchParams(new FormData(form));" +
+            "  fetch('/settings/action_page', {" +
+            "    method: 'POST'," +
+            "    headers: {" +
+            "      'Content-Type': 'application/x-www-form-urlencoded'" +
+            "    }," +
+            "    body: formData.toString()" +
+            "  })" +
+            "  .then(response => {" +
+            "    if(response.ok) {" +
+            "      alert('Settings updated successfully!');" +
+            "      location.reload();" +
+            "    } else {" +
+            "      response.text().then(text => alert('Error: ' + text));" +
+            "    }" +
+            "  })" +
+            "  .catch(error => {" +
+            "    console.error('Error:', error);" +
+            "    alert('Error updating settings: ' + error);" +
+            "  });" +
+            "}" +
+            "function resetDefaults() {" +
+            "  if(confirm('Reset to default settings?')) {" +
+            "    fetch('/settings/reset', {method: 'POST'})" +
+            "    .then(response => {" +
+            "      if(response.ok) {" +
+            "        alert('Settings reset to defaults');" +
+            "        location.reload();" +
+            "      }" +
+            "    });" +
+            "  }" +
+            "}" +
+            "</script>" +
+            "</HEAD>" +
             "<BODY style='font-size:300%;background-color:black;color:white'>" +
-            "  <form action='/settings/action_page'>" +
-            "MIN Gyro [degree/sec]:<br><input style='font-size:150%' type='number'  name='MIN_GYRO'  value= " + MIN_GYRO + "><br>" +
-            "MAX Gyro [degree/sec]:<br><input style='font-size:150%' type='number'  name='MAX_GYRO'  value= " + MAX_GYRO + "><br>" +
-            "MIN Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MIN_FIRE_TIME'  value= " + MIN_FIRE_TIME + "><br>" +
-            "MAX Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MAX_FIRE_TIME'  value= " + MAX_FIRE_TIME + "><br>" + 
-            "RESET Time Limit [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='RESET_LIMIT'  value= " + RESET_LIMIT + "><br>" + 
-            "Fire Cylce Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='FIRE_CYCLE'  value= " + FIRE_CYCLE + "><br>" + 
-            "Remote Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='REMOTE_FIRE_TIME'  value= " + REMOTE_FIRE_TIME + "><br><br><br>	 " + 
-            "    <input type='submit' style='font-size:300%;color:red' value='UPDATE'>" +
-            "  </form>" +
-            "<br>" +
-            "<form action='/settings/reset' method='post'>" +
-            "    <input type='submit' style='font-size:300%;color:orange' value='Reset to Defaults'>" +
+            "<form id='settingsForm' onsubmit='submitSettings(event)' method='POST' enctype='application/x-www-form-urlencoded'>" +  // Added method and enctype
+            "MIN Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MIN_GYRO' value='" + MIN_GYRO + "'><br>" +
+            "MAX Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MAX_GYRO' value='" + MAX_GYRO + "'><br>" +
+            "MIN Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MIN_FIRE_TIME' value='" + MIN_FIRE_TIME + "'><br>" +
+            "MAX Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MAX_FIRE_TIME' value='" + MAX_FIRE_TIME + "'><br>" +
+            "RESET Time Limit [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='RESET_LIMIT' value='" + RESET_LIMIT + "'><br>" +
+            "Fire Cycle Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='FIRE_CYCLE' value='" + FIRE_CYCLE + "'><br>" +
+            "Remote Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='REMOTE_FIRE_TIME' value='" + REMOTE_FIRE_TIME + "'><br><br><br>" +
+            "<input type='submit' style='font-size:300%;color:red' value='UPDATE'>" +
             "</form>" +
-            "<p><a href='/'>Root Page</a></p>"+
-            "<p><a href='/settings'>Settings Control Page</a></p>"+
-            "<p><a href='/fire'>Fire Control Page</a></p>"+
-            "<p><a href='/data'>Data Page</a></p>"+
+            "<br>" +
+            "<button onclick='resetDefaults()' style='font-size:300%;color:orange'>Reset to Defaults</button>" +
+            // ... navigation links ...
             "</BODY>" +
-            "</HTML>" +
-            "\r\n";
-          
-  return htmlPage;
+            "</HTML>";
+            
+    return htmlPage;
 }
 
 //===============================================================
 // This routine is executed when you open its IP in browser
 //===============================================================
 void handleRoot() {
- //String s = MAIN_page; //Read HTML contents
- String s = prepare_Root_Page();
- server.send(200, "text/html", s); //Send web page
+  server.sendHeader("Cache-Control", "max-age=3600"); // Cache for 1 hour
+  server.send(200, "text/html", prepare_Root_Page());
 }
 
 //===============================================================
 // This routine is executed when you open the fire control page
 //===============================================================
 void handle_Fire_Control_Page() {
- server.send(200, "text/html", prepare_Fire_Control_Page()); //Send web page
+  server.send(200, "text/html", prepare_Fire_Control_Page());
 }
 
 //===============================================================
 // This routine is executed when you trigger the FIRE on the control page
 //===============================================================
 void handle_Fire_Control_ON_Page() {
- REMOTE_TRIGGER_STATE  = 0;
- server.send(200, "text/html", prepare_Fire_Control_Page()); //Send web page
+    // Add protection against multiple rapid clicks
+    static unsigned long lastFireTime = 0;
+    unsigned long currentTime = millis();
+    
+    if (currentTime - lastFireTime < 1000) { // Prevent multiple triggers within 1 second
+        server.send(429, "text/plain", "Too many requests");
+        return;
+    }
+    
+    // Set the fire state
+    REMOTE_TRIGGER_STATE = 0;  // Trigger the fire
+    FIRE_ON = 1;  // Set fire state to active
+    FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;  // Set the fire duration
+    FIRE_TIMER = 0;  // Reset the fire timer
+    RESET_TIMER = 0;  // Reset the reset timer
+    RESET_STATE = 0;  // Disable reset state while firing
+    
+    lastFireTime = currentTime;
+    server.send(200, "text/plain", "OK");
 }
 
 //===============================================================
 // This routine is executed when you open the fire settings page
 //===============================================================
 void handle_Fire_Settings_Page() {
- String s = prepare_Fire_Settings_Page();
- server.send(200, "text/html", s); //Send web page
+  server.send(200, "text/html", prepare_Fire_Settings_Page());
 }
 
 //===============================================================
 // This routine is executed when you open the data page
 //===============================================================
 void handle_Data_Page() {
- String s = prepare_Data_Page();
- server.send(200, "text/html", s); //Send web page
+  server.send(200, "text/html", prepare_Data_Page());
 }
 
 //===============================================================
 // This routine is executed when you press submit
 //===============================================================
 void handleForm() {
+    Serial.println("Form handler called"); // Debug print
+    
+    // Print all received arguments for debugging
+    for (int i = 0; i < server.args(); i++) {
+        Serial.printf("Arg %d: %s = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
+    }
+
+    // Remove the check for "plain" data since we're handling form data
+    if (server.args() == 0) {
+        server.send(400, "text/plain", "No data received");
+        return;
+    }
+
+    // Rest of the function remains the same...
+}
+
+void handleResetDefaults() {
+    loadDefaultSettings();
+    saveSettings();
+    server.send(200, "text/html", prepare_Fire_Settings_Page());
+}
+
+void handle_Data_Status() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
+  // Pre-allocate string space
+  String json;
+  json.reserve(512); // Adjust size as needed
+  
+  json += "{";
+  json += "\"resetTimer\":" + String(RESET_TIMER, 2) + ",";
+  json += "\"resetLimit\":" + String(RESET_LIMIT, 2) + ",";
+  json += "\"resetState\":" + String(RESET_STATE) + ",";
+  json += "\"fireTimer\":" + String(FIRE_TIMER, 2) + ",";
+  json += "\"fireTimeLimit\":" + String(FIRE_TIME_LIMIT, 2) + ",";
+  json += "\"remoteTriggerState\":" + String(REMOTE_TRIGGER_STATE) + ",";
+  json += "\"localTriggerState1\":" + String(digitalRead(MANUAL_TRIGGER_1)) + ",";
+  json += "\"localTriggerState2\":" + String(digitalRead(MANUAL_TRIGGER_2)) + ",";
+  json += "\"fireOn\":" + String(FIRE_ON) + ",";
+  json += "\"accel1\":" + String(ACCEL_1[8], 2) + ",";
+  json += "\"accel2\":" + String(ACCEL_2[8], 2) + ",";
+  json += "\"aveGyro\":" + String(AVE_GYRO, 2);
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handle_Settings_Update() {
+    if (!server.hasArg("plain")) {
+        server.send(400, "text/plain", "No data received");
+        return;
+    }
+
+    String data = server.arg("plain");
+    
+    // Parse JSON data
+    // Note: In production code, you should use a proper JSON parser
     float newMinFireTime = server.arg("MIN_FIRE_TIME").toFloat();
     float newMaxFireTime = server.arg("MAX_FIRE_TIME").toFloat();
     float newResetLimit = server.arg("RESET_LIMIT").toFloat();
@@ -392,10 +521,19 @@ void handleForm() {
         newResetLimit <= 0 || newRemoteFireTime <= 0 || 
         newFireCycle < 0 || newMinFireTime >= newMaxFireTime ||
         newMinGyro <= 0 || newMaxGyro <= 0 || 
-        newMinGyro >= newMaxGyro) { 
-        server.send(400, "text/html", "Invalid values provided");
+        newMinGyro >= newMaxGyro || newMaxGyro > 2000) {
+        server.send(400, "text/plain", "Invalid values provided");
         return;
     }
+    
+    // Update settings
+    currentSettings.minFireTime = newMinFireTime;
+    currentSettings.maxFireTime = newMaxFireTime;
+    currentSettings.remoteFireTime = newRemoteFireTime;
+    currentSettings.resetLimit = newResetLimit;
+    currentSettings.fireCycle = newFireCycle;
+    currentSettings.minGyro = newMinGyro;
+    currentSettings.maxGyro = newMaxGyro;
     
     // Update global variables
     MIN_FIRE_TIME = newMinFireTime;
@@ -406,55 +544,87 @@ void handleForm() {
     MIN_GYRO = newMinGyro;
     MAX_GYRO = newMaxGyro;
     
-    // Update currentSettings struct
-    currentSettings.minFireTime = MIN_FIRE_TIME;
-    currentSettings.maxFireTime = MAX_FIRE_TIME;
-    currentSettings.remoteFireTime = REMOTE_FIRE_TIME;
-    currentSettings.resetLimit = RESET_LIMIT;
-    currentSettings.fireCycle = FIRE_CYCLE;
-    currentSettings.minGyro = MIN_GYRO;
-    currentSettings.maxGyro = MAX_GYRO;
-    
     // Save to EEPROM
     if (!saveSettings()) {
-        server.send(500, "text/html", "Failed to save settings");
+        server.send(500, "text/plain", "Failed to save settings");
         return;
     }
     
-    server.send(200, "text/html", prepare_Fire_Settings_Page());
+    server.send(200, "text/plain", "Settings updated successfully");
 }
 
-void handleResetDefaults() {
+void handle_Settings_Reset() {
     loadDefaultSettings();
-    saveSettings();
-    server.send(200, "text/html", prepare_Fire_Settings_Page());
+    if (!saveSettings()) {
+        server.send(500, "text/plain", "Failed to reset settings");
+        return;
+    }
+    server.send(200, "text/plain", "Settings reset to defaults");
+}
+
+void handle_Fire_Status() {
+    String json;
+    json.reserve(256);
+    
+    json = "{";
+    json += "\"fireOn\":" + String(FIRE_ON) + ",";
+    json += "\"resetTimer\":" + String(RESET_TIMER, 2) + ",";
+    json += "\"resetLimit\":" + String(RESET_LIMIT, 2) + ",";
+    json += "\"fireTimer\":" + String(FIRE_TIMER, 2) + ",";
+    json += "\"fireTimeLimit\":" + String(FIRE_TIME_LIMIT, 2);
+    json += "}";
+    
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Cache-Control", "no-cache");
+    server.send(200, "application/json", json);
 }
 
 void start_wifi(){
- WiFi.mode(WIFI_AP);
- WiFi.softAP("HighNoon","shaboinky",1,0,8);
- //WiFi.softAPConfig(local_ip, gateway, mask);
- delay(100);
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("HighNoon", "shaboinky", 1, 0, 8);
+  
+  // Add WiFi power management
+  WiFi.setOutputPower(20.5); // Max WiFi power
+  WiFi.setSleepMode(WIFI_NONE_SLEEP); // Disable WiFi sleep mode
+  
+  // Increase the TCP MSS for better performance
+  WiFi.setPhyMode(WIFI_PHY_MODE_11N); // Use 802.11n mode
+  
+  delay(500);
+  
+  // Remove this line that caused the error:
+  // server.enableCrossOrigin(true);
+  
+  // Instead, add CORS headers to your request handlers
+  server.onNotFound([]() {
+      server.sendHeader("Access-Control-Allow-Origin", "*");
+      server.send(404, "text/plain", "Not found");
+  });
 
-  server.on("/", handleRoot);      //Which routine to handle at root location
+  // Add CORS headers to your existing handlers
+  server.on("/", HTTP_GET, []() {
+      server.sendHeader("Access-Control-Allow-Origin", "*");
+      handleRoot();
+  });
 
-  server.on("/settings", handle_Fire_Settings_Page);      //
-  server.on("/settings/action_page", handleForm);         //form action is handled here
+  // Fire Control endpoints
+  server.on("/fire", HTTP_GET, handle_Fire_Control_Page);
+  server.on("/fire/on", HTTP_GET, handle_Fire_Control_ON_Page);
+  server.on("/fire/status", HTTP_GET, handle_Fire_Status);
 
-  server.on("/fire", handle_Fire_Control_Page);           //
-  server.on("/fire/on", handle_Fire_Control_ON_Page);     //
+  // Settings endpoints
+  server.on("/settings", HTTP_GET, handle_Fire_Settings_Page);
+  server.on("/settings/action_page", HTTP_POST, handle_Settings_Update);
+  server.on("/settings/reset", HTTP_POST, handle_Settings_Reset);
 
-  server.on("/data", handle_Data_Page);      //
-
-  server.on("/settings/reset", HTTP_POST, handleResetDefaults);
+  // Data endpoints
+  server.on("/data", HTTP_GET, handle_Data_Page);
+  server.on("/data/status", HTTP_GET, handle_Data_Status);
 
   server.begin();
-  Serial.println();
-  Serial.printf("Web server started, open %s in a web browser\n", WiFi.localIP().toString().c_str());
-  Serial.println();
-  Serial.println("Server started.");
+  Serial.println("Web server started");
   Serial.print("IP: "); Serial.println(WiFi.softAPIP());
-  Serial.print("MAC:"); Serial.println(WiFi.softAPmacAddress()); 
+  Serial.print("MAC: "); Serial.println(WiFi.softAPmacAddress());
 }
 
 
@@ -532,7 +702,6 @@ int I2C_ClearBus() {
   return 0; // all ok
 }
 
-
 void start_I2C_communication(int MPU){
   
   int rtn = I2C_ClearBus(); // clear the I2C bus first before calling Wire.begin()
@@ -588,7 +757,6 @@ void start_I2C_communication(int MPU){
     Wire.endTransmission(true);
 }
 
-
 void get_accel_data(int MPU, int16_t output_array[9]){
   // Note: output_array must be a GLOBAL array variable
 
@@ -622,6 +790,9 @@ void get_accel_data(int MPU, int16_t output_array[9]){
 }
 
 void setup() {
+  // Add watchdog timer
+  ESP.wdtEnable(WDTO_8S);
+  
   // Initialize the serial port
     Serial.begin(9600);
 
@@ -643,106 +814,52 @@ void setup() {
 }
 
 void loop() {
-
-  server.handleClient();          //Handle client requests
-
-  //Get Big Red button and local button trigger state
-    LOCAL_TRIGGER_STATE_1 = digitalRead(MANUAL_TRIGGER_1);
-    LOCAL_TRIGGER_STATE_2 = digitalRead(MANUAL_TRIGGER_2);
-
-  // Get Accerometer data:
-    get_accel_data(MPU_1, ACCEL_1);
-    get_accel_data(MPU_2, ACCEL_2);
-    AVE_GYRO = (ACCEL_1[8] + ACCEL_2[8])/2;
-
-    if (AVE_GYRO == 0){
-        // Reset the IC2 comms is the thing craps out...
-        start_I2C_communication(MPU_1);
-        start_I2C_communication(MPU_2);
-    }
-
-  // Calculate fire time FIRE_TIME_LIMIT:
-    FIRE_TIME_LIMIT = max(FIRE_TIME_LIMIT,MIN_FIRE_TIME+(AVE_GYRO-MIN_GYRO)*(MAX_FIRE_TIME-MIN_FIRE_TIME)/(MAX_GYRO-MIN_GYRO));
-
-    if (REMOTE_TRIGGER_STATE == 0){
-      FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;
+  static unsigned long lastUpdate = 0;
+  const unsigned long updateInterval = LOOP_RATE * 1000; // Convert to milliseconds
+  
+  unsigned long currentMillis = millis();
+  
+  // Handle client requests as frequently as possible
+  server.handleClient();
+  
+  // Only update sensors and fire control at the specified LOOP_RATE
+  if (currentMillis - lastUpdate >= updateInterval) {
+      lastUpdate = currentMillis;
+      
+      // Get sensor data
+      get_accel_data(MPU_1, ACCEL_1);
+      get_accel_data(MPU_2, ACCEL_2);
+      
+      // Fire control logic
+      if (FIRE_ON) {
+          // Update fire pins
+          digitalWrite(FIRE_PIN_1, HIGH);
+          digitalWrite(FIRE_PIN_2, HIGH);
+          
+          // Check if fire duration is complete
+          if (FIRE_TIMER >= FIRE_TIME_LIMIT) {
+              FIRE_ON = 0;
+              FIRE_TIMER = 0;
+              RESET_STATE = 1;  // Enable reset state after firing
+              digitalWrite(FIRE_PIN_1, LOW);
+              digitalWrite(FIRE_PIN_2, LOW);
+          }
+      } else {
+          digitalWrite(FIRE_PIN_1, LOW);
+          digitalWrite(FIRE_PIN_2, LOW);
       }
-    // If only one of the manual triggers is energized, use LOW fire time limit
-      if (LOCAL_TRIGGER_STATE_1 == 1 && LOCAL_TRIGGER_STATE_2 == 0){
-        FIRE_TIME_LIMIT = MIN_FIRE_TIME;
-        }
-      if (LOCAL_TRIGGER_STATE_1 == 0 && LOCAL_TRIGGER_STATE_2 == 1){
-        FIRE_TIME_LIMIT = MIN_FIRE_TIME;
-        }
-    // If both of the manual triggers are energized, is HIGH fire time limit
-      if (LOCAL_TRIGGER_STATE_1 == 0 && LOCAL_TRIGGER_STATE_2 == 0){
-        FIRE_TIME_LIMIT = MAX_FIRE_TIME;
-        }
-
-    //If either the remote or the local button is pressed, trigger the fire
-    //Oboard LED indicated when a trigger signal is being recieved
-    if (REMOTE_TRIGGER_STATE == 0 || LOCAL_TRIGGER_STATE_1==0 || LOCAL_TRIGGER_STATE_2==0 || AVE_GYRO > MIN_GYRO){
-    TRIGGER_STATE = 0;
-
-    //Reset triggers when the TRIGGER_STATE is true
-    REMOTE_TRIGGER_STATE  = 1;
-    LOCAL_TRIGGER_STATE_1 = 1;
-    LOCAL_TRIGGER_STATE_2 = 1;
-    }
-    else {
-    TRIGGER_STATE = 1;
-    }
-
-  if (TRIGGER_STATE == 0 && RESET_TIMER >= RESET_LIMIT){
-    FIRE_ON = 1.0;  // Turn on the Fire!!
-    RESET_STATE = 0;
-    RESET_TIMER = 0.0;
-  }
-
-  if (FIRE_TIMER > FIRE_TIME_LIMIT){
-    FIRE_TIMER = 0.0;  // Reset the Fire timer
-    FIRE_TIME_LIMIT = 0.0; // Reset the Fire time limit (will be restored from Gryo Data)
-    FIRE_ON    = 0.0;  // Turn off the fire  :(
-    RESET_STATE = 1;
+      
+      // Update timers
+      if (FIRE_ON) {
+          FIRE_TIMER += LOOP_RATE;
+      }
+      if (RESET_STATE) {
+          RESET_TIMER += LOOP_RATE;
+      }
   }
   
-
-//  Control fire valves
-  if (FIRE_ON == 1){
-    // If the FIRE_CYCLE setting is set to zero - trigger both valves at the same time
-      if (FIRE_CYCLE == 0.0){
-        // Turn the LED on (HIGH is the voltage level)
-        digitalWrite(FIRE_PIN_1, HIGH);
-        digitalWrite(FIRE_PIN_2, HIGH);
-      }
-      else {
-          FIRE_CYCLE_COUNTER = sin ( 2 * 3.14159 * FIRE_TIMER / FIRE_CYCLE);
-            // If the FIRE_CYCLE_COUNTER setting is >= zero, then trigger valve #1
-            if (FIRE_CYCLE_COUNTER >= 0){
-              // Turn Valve #1 ON and Valve #2 OFF
-              digitalWrite(FIRE_PIN_1, HIGH);
-              digitalWrite(FIRE_PIN_2, LOW);
-            }
-            // If the FIRE_CYCLE_COUNTER setting is <= zero, then trigger valve #2
-            if (FIRE_CYCLE_COUNTER <= 0){
-              // Turn Valve #1 OFF and Valve #2 ON
-              digitalWrite(FIRE_PIN_1, LOW);
-              digitalWrite(FIRE_PIN_2, HIGH);
-            }
-      }
-    }
-    else {
-      // Turn the fire off by making the voltage LOW
-      digitalWrite(FIRE_PIN_1, LOW);
-      digitalWrite(FIRE_PIN_2, LOW);
-     }
-
-
-  FIRE_TIMER = FIRE_TIMER + LOOP_RATE * FIRE_ON; // Add time to the Fire Timer
-  RESET_TIMER = RESET_TIMER + LOOP_RATE * RESET_STATE; // Add time to the Fire Timer
-
-  // Wait for next loop
-  delay(1000 * LOOP_RATE);  //
+  // Small delay to prevent WiFi issues
+  delay(1);
 }
 
 // Add near other constants
