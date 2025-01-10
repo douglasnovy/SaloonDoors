@@ -124,6 +124,13 @@ SystemStats currentStats;
 // Add these globals near the top with other globals
 unsigned long fireStartTime = 0;  // To track duration of current fire event
 
+// Add these forward declarations after the struct definitions but before any function implementations
+bool saveStats();
+void loadDefaultStats();
+bool loadStats();
+void startFire();
+void stopFire();
+
 // Modify the function that starts the fire (where FIRE_ON is set to true)
 void startFire() {
     FIRE_ON = true;
@@ -138,10 +145,16 @@ void stopFire() {
         FIRE_ON = false;
         // Calculate fire duration and update stats
         float fireDuration = (millis() - fireStartTime) / 1000.0;  // Convert to seconds
+        
+        // Update total fire time
+        currentStats.totalFireTime += fireDuration;
+        
+        // Update longest fire duration if applicable
         if (fireDuration > currentStats.longestFireDuration) {
             currentStats.longestFireDuration = fireDuration;
-            saveStats();
         }
+        
+        saveStats();
     }
 }
 
@@ -331,6 +344,7 @@ String prepare_Fire_Control_Page() {
     htmlPage += "<HTML>";
     htmlPage += "<HEAD>";
     htmlPage += "<TITLE>Saloon Doors Controls</TITLE>";
+    htmlPage += "<meta charset='UTF-8'>";
     htmlPage += "<style>";
     htmlPage += "  .button {";
     htmlPage += "    border: none;";
@@ -343,6 +357,21 @@ String prepare_Fire_Control_Page() {
     htmlPage += "    margin: 4px 2px;";
     htmlPage += "    cursor: pointer;";
     htmlPage += "    transition: background-color 0.3s;";
+    htmlPage += "  }";
+    htmlPage += "  .status-left {";
+    htmlPage += "    position: fixed;";
+    htmlPage += "    top: 10px;";
+    htmlPage += "    left: 10px;";
+    htmlPage += "    font-size: 144px;";
+    htmlPage += "  }";
+    htmlPage += "  .status-right {";
+    htmlPage += "    position: fixed;";
+    htmlPage += "    top: 10px;";
+    htmlPage += "    right: 10px;";
+    htmlPage += "    font-size: 144px;";
+    htmlPage += "  }";
+    htmlPage += "  .main-content {";
+    htmlPage += "    margin-top: 200px;";
     htmlPage += "  }";
     htmlPage += "</style>";
     htmlPage += "<script>";
@@ -365,6 +394,8 @@ String prepare_Fire_Control_Page() {
     htmlPage += "        btn.style.backgroundColor = 'green';";
     htmlPage += "        btn.disabled = false;";
     htmlPage += "      }";
+    htmlPage += "      document.getElementById('pin1Status').innerHTML = !data.firePin1 ? '🟢' : '🔴';";
+    htmlPage += "      document.getElementById('pin2Status').innerHTML = !data.firePin2 ? '🟢' : '🔴';";
     htmlPage += "    })";
     htmlPage += "    .catch(error => console.error('Error:', error));";
     htmlPage += "}";
@@ -397,6 +428,9 @@ String prepare_Fire_Control_Page() {
     htmlPage += "</script>";
     htmlPage += "</HEAD>";
     htmlPage += "<BODY style='font-size:300%;background-color:black;color:white'>";
+    htmlPage += "<div class='status-left' id='pin1Status'>🟢</div>";
+    htmlPage += "<div class='status-right' id='pin2Status'>🟢</div>";
+    htmlPage += "<div class='main-content'>";
     htmlPage += "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span> / " + String(RESET_LIMIT, 2) + "</h3>";
     htmlPage += "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(FIRE_TIMER, 2) + "</span> / <span id='fireTimeLimit'>" + String(FIRE_TIME_LIMIT, 2) + "</span></h3>";
     htmlPage += "<br>";
@@ -409,6 +443,7 @@ String prepare_Fire_Control_Page() {
     htmlPage += "<p><a href='/settings'>Settings Control Page</a></p>";
     htmlPage += "<p><a href='/fire'>Fire Control Page</a></p>";
     htmlPage += "<p><a href='/data'>Data Page</a></p>";
+    htmlPage += "</div>";
     htmlPage += "</BODY>";
     htmlPage += "</HTML>";
     
@@ -732,7 +767,9 @@ void handle_Fire_Status() {
     json += "\"resetTimer\":" + String(RESET_TIMER, 2) + ",";
     json += "\"resetLimit\":" + String(RESET_LIMIT, 2) + ",";
     json += "\"fireTimer\":" + String(FIRE_TIMER, 2) + ",";
-    json += "\"fireTimeLimit\":" + String(FIRE_TIME_LIMIT, 2);
+    json += "\"fireTimeLimit\":" + String(FIRE_TIME_LIMIT, 2) + ",";
+    json += "\"firePin1\":" + String(digitalRead(FIRE_PIN_1)) + ",";
+    json += "\"firePin2\":" + String(digitalRead(FIRE_PIN_2));
     json += "}";
     
     server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -1031,67 +1068,112 @@ void setup() {
 }
 
 void loop() {
-  dnsServer.processNextRequest();
-  
-  static unsigned long lastUpdate = 0;
-  const unsigned long updateInterval = LOOP_RATE * 1000; // Convert to milliseconds
-  
-  unsigned long currentMillis = millis();
-  
-  // Handle client requests as frequently as possible
-  server.handleClient();
-  
-  // Only update sensors and fire control at the specified LOOP_RATE
-  if (currentMillis - lastUpdate >= updateInterval) {
-      lastUpdate = currentMillis;
-      
-      // Get sensor data
-      get_accel_data(MPU_1, ACCEL_1);
-      get_accel_data(MPU_2, ACCEL_2);
-      
-      // Fire control logic
-      if (FIRE_ON) {
-          digitalWrite(FIRE_PIN_1, HIGH);
-          digitalWrite(FIRE_PIN_2, HIGH);
-          
-          if (FIRE_TIMER >= FIRE_TIME_LIMIT) {
-              stopFire();
-              FIRE_TIMER = 0;
-              RESET_STATE = 1;
-              digitalWrite(FIRE_PIN_1, LOW);
-              digitalWrite(FIRE_PIN_2, LOW);
-          }
-      } else {
-          digitalWrite(FIRE_PIN_1, LOW);
-          digitalWrite(FIRE_PIN_2, LOW);
-      }
-      
-      // Update timers
-      if (FIRE_ON) {
-          FIRE_TIMER += LOOP_RATE;
-      }
-      if (RESET_STATE) {
-          RESET_TIMER += LOOP_RATE;
-      }
-      
-      // Track highest acceleration
-      float currentAccel1 = ACCEL_1[7];  // Using magnitude of acceleration
-      float currentAccel2 = ACCEL_2[7];
-      float maxCurrentAccel = max(currentAccel1, currentAccel2);
-      if (maxCurrentAccel > currentStats.highestAccelReading) {
-          currentStats.highestAccelReading = maxCurrentAccel;
-          saveStats();
-      }
-      
-      // Track fire time
-      if (FIRE_ON) {
-          currentStats.totalFireTime += LOOP_RATE;
-          saveStats();
-      }
-  }
-  
-  // Small delay to prevent WiFi issues
-  delay(1);
+    dnsServer.processNextRequest();
+    
+    static unsigned long lastUpdate = 0;
+    const unsigned long updateInterval = LOOP_RATE * 1000; // Convert to milliseconds
+    
+    unsigned long currentMillis = millis();
+    
+    // Handle client requests as frequently as possible
+    server.handleClient();
+    
+    // Only update sensors and fire control at the specified LOOP_RATE
+    if (currentMillis - lastUpdate >= updateInterval) {
+        lastUpdate = currentMillis;
+        
+        // Get sensor data
+        get_accel_data(MPU_1, ACCEL_1);
+        get_accel_data(MPU_2, ACCEL_2);
+        
+        // Calculate average gyro reading
+        AVE_GYRO = (ACCEL_1[8] + ACCEL_2[8]) / 2.0;
+        
+        // Check manual triggers
+        LOCAL_TRIGGER_STATE_1 = digitalRead(MANUAL_TRIGGER_1);
+        LOCAL_TRIGGER_STATE_2 = digitalRead(MANUAL_TRIGGER_2);
+        
+        // Determine if we should trigger based on acceleration
+        if (AVE_GYRO > MIN_GYRO && RESET_TIMER >= RESET_LIMIT && !FIRE_ON) {
+            // Calculate fire duration based on gyro reading
+            float scale = (AVE_GYRO - MIN_GYRO) / (MAX_GYRO - MIN_GYRO);
+            scale = constrain(scale, 0.0, 1.0);
+            FIRE_TIME_LIMIT = MIN_FIRE_TIME + scale * (MAX_FIRE_TIME - MIN_FIRE_TIME);
+            
+            startFire();
+            currentStats.accelTriggersCount++;
+            
+            // Update acceleration statistics
+            if (AVE_GYRO > currentStats.highestAccelReading) {
+                currentStats.highestAccelReading = AVE_GYRO;
+            }
+            currentStats.averageAccelTrigger = 
+                (currentStats.averageAccelTrigger * (currentStats.accelTriggersCount - 1) + AVE_GYRO) 
+                / currentStats.accelTriggersCount;
+            
+            saveStats();
+        }
+        
+        // Check manual or remote triggers
+        if ((LOCAL_TRIGGER_STATE_1 == LOW || LOCAL_TRIGGER_STATE_2 == LOW || REMOTE_TRIGGER_STATE == 0) 
+            && RESET_TIMER >= RESET_LIMIT && !FIRE_ON) {
+            FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;
+            startFire();
+        }
+        
+        // Fire control logic
+        if (FIRE_ON) {
+            // Handle alternating fire pattern
+            if (FIRE_CYCLE_COUNTER <= FIRE_CYCLE) {
+                digitalWrite(FIRE_PIN_1, HIGH);
+                digitalWrite(FIRE_PIN_2, LOW);
+            } else {
+                digitalWrite(FIRE_PIN_1, LOW);
+                digitalWrite(FIRE_PIN_2, HIGH);
+            }
+            
+            FIRE_CYCLE_COUNTER += LOOP_RATE;
+            if (FIRE_CYCLE_COUNTER >= FIRE_CYCLE * 2) {
+                FIRE_CYCLE_COUNTER = 0;
+            }
+            
+            if (FIRE_TIMER >= FIRE_TIME_LIMIT) {
+                stopFire();
+                FIRE_TIMER = 0;
+                FIRE_CYCLE_COUNTER = 0;
+                RESET_STATE = 0;
+                RESET_TIMER = 0;
+                digitalWrite(FIRE_PIN_1, LOW);
+                digitalWrite(FIRE_PIN_2, LOW);
+            }
+        } else {
+            digitalWrite(FIRE_PIN_1, LOW);
+            digitalWrite(FIRE_PIN_2, LOW);
+        }
+        
+        // Update timers
+        if (FIRE_ON) {
+            FIRE_TIMER += LOOP_RATE;
+        } else if (!RESET_STATE && RESET_TIMER < RESET_LIMIT) {  // Only increment reset timer when not firing and below limit
+            RESET_TIMER += LOOP_RATE;
+        }
+        
+        // Update memory usage statistics
+        uint32_t freeHeap = ESP.getFreeHeap();
+        uint32_t maxFreeBlock = ESP.getMaxFreeBlockSize();
+        float currentMemUsage = 100.0 * (1.0 - ((float)freeHeap / (float)maxFreeBlock));
+        
+        // Ensure the value is within reasonable bounds (0-100%)
+        currentMemUsage = constrain(currentMemUsage, 0.0, 100.0);
+        
+        if (currentMemUsage > currentStats.peakMemoryUsage && !isnan(currentMemUsage)) {
+            currentStats.peakMemoryUsage = currentMemUsage;
+            saveStats();
+        }
+    }
+    
+    // Small delay to prevent WiFi issues
+    delay(1);
 }
 
 // Add near other constants
