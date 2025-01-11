@@ -1159,9 +1159,16 @@ void loop() {
         }
         
         // Update memory usage statistics
-        uint32_t freeHeap = ESP.getFreeHeap();
-        uint32_t maxFreeBlock = ESP.getMaxFreeBlockSize();
-        float currentMemUsage = 100.0 * (1.0 - ((float)freeHeap / (float)maxFreeBlock));
+        uint32_t freeHeap = ESP.getFreeHeap();            // Similar to esp_get_free_heap_size()
+        uint32_t maxFreeBlock = ESP.getMaxFreeBlockSize(); // Largest contiguous block
+        uint32_t heapFragmentation = ESP.getHeapFragmentation(); // Fragmentation percentage
+        
+        // Calculate memory usage considering both total free and largest block
+        float currentMemUsage = 100.0 * (1.0 - ((float)maxFreeBlock / (float)freeHeap));
+        
+        // Debug print
+        Serial.printf("Free heap: %u bytes, Max block: %u bytes, Fragmentation: %u%%, Usage: %.2f%%\n", 
+                     freeHeap, maxFreeBlock, heapFragmentation, currentMemUsage);
         
         // Ensure the value is within reasonable bounds (0-100%)
         currentMemUsage = constrain(currentMemUsage, 0.0, 100.0);
