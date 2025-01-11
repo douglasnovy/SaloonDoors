@@ -8,65 +8,15 @@
 #include <Esp.h>
 #include <DNSServer.h>
 
-
 using namespace std;
 
-//   "sketch": "Saloon_Doors_Main_Board\\Saloon_Doors_V191201.ino",
-
-// Define WiFi Settings
-  //WiFiServer server(80);
-  ESP8266WebServer server(80);
-  //IPAddress local_ip(100,100,1,10);
-  //IPAddress gateway(100,100,1,1);
-  //IPAddress mask(255,255,0,0);
-  // IPAddress = 192.168.4.1  <--------------------
-
-//Define Pin assignments:
-  //#define          LED_PIN    2   //Labeled ??
-  //                   SDA    4   //Labeled "D2"
-  //                   SCL    5   //Labeled "D1" 
-  #define       FIRE_PIN_1   14   //Labeled "D5"
-  #define       FIRE_PIN_2   12   //Labeled "D6"
-  #define MANUAL_TRIGGER_1   0   //Labeled "D3"      
-  #define MANUAL_TRIGGER_2   2   //Labeled "D4"      
-
-// Define & Initialize System Settigns:
-  float LOOP_RATE = 0.05; //Define the amount of seconds per loop
-  int REMOTE_TRIGGER_STATE = 1; // Inititalize the REMOTE trigger state to open
-  int LOCAL_TRIGGER_STATE_1 = 1; // Inititalize the LOCAL 1 trigger state to open
-  int LOCAL_TRIGGER_STATE_2 = 1; // Inititalize the LOCAL 2 trigger state to open
-  int TRIGGER_STATE = 0; // Inititalize the trigger state to open
-  int FIRE_ON = 0; // Define switch for when fire is active
-  float FIRE_TIMER;  //declare a timer variable for the duration of fire output
-  String request = "null";
-  int RESET_STATE = 1;
-
-// Define Initial Accerometer Settings:
-  const int MPU_1=0x68; //Need to change the I2C address
-  const int MPU_2=0x69; //Need to change the I2C address
-  int16_t ACCEL_1[9] = {0,0,0,0,0,0,0,0,0}; // Global declare accel 1 and Initialize
-  int16_t ACCEL_2[9] = {0,0,0,0,0,0,0,0,0}; // Global declare accel 2 and Initialize
-  float AVE_GYRO = 0;
-  float MIN_GYRO;  // Degrees per second
-  float MAX_GYRO;  // Degrees per second
-  float GYRO_FACTOR;
-  float ACCEL_FACTOR;
-
-//  Define Fire control Settings:
-  float MIN_FIRE_TIME;  // Number of fire seconds corresponding to the MIN_GYRO value
-  float MAX_FIRE_TIME;  // Number of fire seconds corresponding to the MIN_GYRO value
-  float FIRE_TIME_LIMIT = 0.0;  //Initialize fire time
-  float REMOTE_FIRE_TIME;  //Define fire time for remote trigger
-  float RESET_LIMIT;
-  float RESET_TIMER;
-  float FIRE_CYCLE;  //Define fire time to cycle through both sides
-  float FIRE_CYCLE_COUNTER = 0.0;  //Define fire time to cycle through both sides
-
-// Add these constants for EEPROM management
-#define EEPROM_SIZE 512
-#define EEPROM_MAGIC_NUMBER 0xAB  // Used to verify if EEPROM has been initialized
-#define EEPROM_MAGIC_ADDR 0
-#define EEPROM_DATA_ADDR 1
+// EEPROM Layout Configuration
+namespace EEPROMConfig {
+    static const int EEPROM_SIZE = 512;
+    static const uint8_t EEPROM_MAGIC_NUMBER = 0xAB;
+    static const int EEPROM_MAGIC_ADDR = 0;
+    static const int EEPROM_DATA_ADDR = 1;
+}
 
 // Define a struct to hold all the settings
 struct FireSettings {
@@ -90,24 +40,21 @@ const FireSettings DEFAULT_SETTINGS = {
     .maxGyro = 750.0
 };
 
-// Global settings variable
-FireSettings currentSettings;
-
-// Add after FireSettings struct
+// First, define the structures
 struct SystemStats {
-    // Core stats
-    unsigned long remoteTriggersCount;
-    unsigned long accelTriggersCount;
-    float highestAccelReading;
-    float totalFireTime;  // in seconds
+    // Core operational stats
+    unsigned long remoteTriggersCount;     // Number of manual/remote button triggers
+    unsigned long accelTriggersCount;      // Number of acceleration-based triggers
+    float highestAccelReading;             // Highest recorded acceleration in g
+    float totalFireTime;                   // Total cumulative firing time in seconds
     
-    // Additional stats
-    float longestFireDuration;      // longest single fire event in seconds
-    float averageAccelTrigger;      // running average of trigger acceleration
-    float peakMemoryUsage;          // percentage of memory used (0-100%)
+    // Performance metrics
+    float longestFireDuration;             // Longest single fire event duration in seconds
+    float averageAccelTrigger;             // Running average of trigger acceleration values
+    float peakMemoryUsage;                 // Peak heap memory usage as percentage (0-100%)
 };
 
-// Add with other constants
+// Define default stats
 const SystemStats DEFAULT_STATS = {
     .remoteTriggersCount = 0,
     .accelTriggersCount = 0,
@@ -118,11 +65,57 @@ const SystemStats DEFAULT_STATS = {
     .peakMemoryUsage = 0.0
 };
 
-// Add with other globals
-SystemStats currentStats;
+struct SystemState {
+    // WiFi/Server settings
+    ESP8266WebServer server{80};
+    DNSServer dnsServer;
 
-// Add these globals near the top with other globals
-unsigned long fireStartTime = 0;  // To track duration of current fire event
+    // Pin assignments (keeping as constants)
+    static const uint8_t FIRE_PIN_1 = 14;      // Labeled "D5"
+    static const uint8_t FIRE_PIN_2 = 12;      // Labeled "D6"
+    static const uint8_t MANUAL_TRIGGER_1 = 0;  // Labeled "D3"
+    static const uint8_t MANUAL_TRIGGER_2 = 2;  // Labeled "D4"
+
+    // System Settings
+    float loopRate = 0.05;
+    int remoteTriggerState = 1;
+    int localTriggerState1 = 1;
+    int localTriggerState2 = 1;
+    int triggerState = 0;
+    int fireOn = 0;
+    float fireTimer = 0;
+    String request = "null";
+    int resetState = 1;
+
+    // Accelerometer Settings
+    static const int MPU_1 = 0x68;
+    static const int MPU_2 = 0x69;
+    int16_t accel1[9] = {0};
+    int16_t accel2[9] = {0};
+    float aveGyro = 0;
+    float minGyro = 0;
+    float maxGyro = 0;
+    float gyroFactor = 0;
+    float accelFactor = 0;
+
+    // Fire control Settings
+    float minFireTime = 0;
+    float maxFireTime = 0;
+    float fireTimeLimit = 0;
+    float remoteFireTime = 0;
+    float resetLimit = 0;
+    float resetTimer = 0;
+    float fireCycle = 0;
+    bool fireCycleToggle = false;  // Instead of fireCycleCounter
+    unsigned long fireStartTime = 0;
+
+    // Current settings and stats
+    FireSettings currentSettings;
+    SystemStats currentStats;
+};
+
+// Create the single global state instance
+SystemState state;
 
 // Add these forward declarations after the struct definitions but before any function implementations
 bool saveStats();
@@ -130,57 +123,95 @@ void loadDefaultStats();
 bool loadStats();
 void startFire();
 void stopFire();
+void logFireStatus(float currentFireDuration, const char* eventType = "Status");
 
 // Modify the function that starts the fire (where FIRE_ON is set to true)
 void startFire() {
-    FIRE_ON = true;
-    fireStartTime = millis();  // Record start time when fire begins
-    currentStats.remoteTriggersCount++;  // If this is a remote trigger
+    // Initiate firing sequence and update statistics
+    state.fireOn = true;
+    state.fireStartTime = millis();        // Track start time for duration calculation
+    state.fireTimer = 0;                   // Reset active fire timer
+    state.currentStats.remoteTriggersCount++;
     saveStats();
 }
 
 // Modify the function that stops the fire
 void stopFire() {
-    if (FIRE_ON) {
-        FIRE_ON = false;
-        // Calculate fire duration and update stats
-        float fireDuration = (millis() - fireStartTime) / 1000.0;  // Convert to seconds
+    // Safely terminate firing sequence and update statistics
+    if (state.fireOn) {
+        state.fireOn = false;
+        unsigned long currentTime = millis();
+        float fireDuration = (currentTime - state.fireStartTime) / 1000.0;
         
-        // Update total fire time
-        currentStats.totalFireTime += fireDuration;
+        // Log the final state before stopping
+        logFireStatus(fireDuration, "Final");
         
-        // Update longest fire duration if applicable
-        if (fireDuration > currentStats.longestFireDuration) {
-            currentStats.longestFireDuration = fireDuration;
+        // Validate and record fire duration with increased tolerance (5 loop cycles worth)
+        if (fireDuration > 0 && fireDuration <= state.fireTimeLimit + (state.loopRate * 5)) {
+            // Double the recorded fire time if both pins were firing simultaneously (fireCycle = 0)
+            float effectiveFireTime = (state.fireCycle == 0) ? fireDuration * 2 : fireDuration;
+            state.currentStats.totalFireTime += effectiveFireTime;
+            
+            if (fireDuration > state.currentStats.longestFireDuration) {
+                state.currentStats.longestFireDuration = fireDuration;
+            }
+            saveStats();
+        } else {
+            logFireStatus(fireDuration, "Invalid");
         }
         
-        saveStats();
+        // Ensure fire pins are disabled
+        digitalWrite(state.FIRE_PIN_1, LOW);
+        digitalWrite(state.FIRE_PIN_2, LOW);
     }
 }
 
 // Add these functions after the FireSettings functions
 bool saveStats() {
-    EEPROM.put(EEPROM_DATA_ADDR + sizeof(FireSettings), currentStats);
+    // Get the currently stored stats from EEPROM for comparison
+    SystemStats oldStats;
+    EEPROM.get(EEPROMConfig::EEPROM_DATA_ADDR + sizeof(FireSettings), oldStats);
+    
+    // Log changes if any values are different
+    Serial.println(F("\n=== Statistics Update ==="));
+    if (oldStats.remoteTriggersCount != state.currentStats.remoteTriggersCount)
+        Serial.printf("Remote Triggers: %lu -> %lu\n", oldStats.remoteTriggersCount, state.currentStats.remoteTriggersCount);
+    if (oldStats.accelTriggersCount != state.currentStats.accelTriggersCount)
+        Serial.printf("Accel Triggers: %lu -> %lu\n", oldStats.accelTriggersCount, state.currentStats.accelTriggersCount);
+    if (oldStats.highestAccelReading != state.currentStats.highestAccelReading)
+        Serial.printf("Highest Accel Reading: %.2f -> %.2f g\n", oldStats.highestAccelReading, state.currentStats.highestAccelReading);
+    if (oldStats.totalFireTime != state.currentStats.totalFireTime)
+        Serial.printf("Total Fire Time: %.2f -> %.2f sec\n", oldStats.totalFireTime, state.currentStats.totalFireTime);
+    if (oldStats.longestFireDuration != state.currentStats.longestFireDuration)
+        Serial.printf("Longest Fire Duration: %.2f -> %.2f sec\n", oldStats.longestFireDuration, state.currentStats.longestFireDuration);
+    if (oldStats.averageAccelTrigger != state.currentStats.averageAccelTrigger)
+        Serial.printf("Average Accel Trigger: %.2f -> %.2f g\n", oldStats.averageAccelTrigger, state.currentStats.averageAccelTrigger);
+    if (oldStats.peakMemoryUsage != state.currentStats.peakMemoryUsage)
+        Serial.printf("Peak Memory Usage: %.2f -> %.2f%%\n", oldStats.peakMemoryUsage, state.currentStats.peakMemoryUsage);
+
+    // Save the new stats
+    EEPROM.put(EEPROMConfig::EEPROM_DATA_ADDR + sizeof(FireSettings), state.currentStats);
     if (!EEPROM.commit()) {
-        Serial.println("Error: Failed to commit stats to EEPROM");
+        Serial.println(F("Error: Failed to commit stats to EEPROM"));
         return false;
     }
+    Serial.println(F("=====================\n"));
     return true;
 }
 
 void loadDefaultStats() {
-    currentStats = DEFAULT_STATS;
+    state.currentStats = DEFAULT_STATS;
 }
 
 bool loadStats() {
-    EEPROM.get(EEPROM_DATA_ADDR + sizeof(FireSettings), currentStats);
+    EEPROM.get(EEPROMConfig::EEPROM_DATA_ADDR + sizeof(FireSettings), state.currentStats);
     
     // Basic validation
     bool valid = true;
-    valid &= currentStats.remoteTriggersCount < 1000000;  // Reasonable maximum
-    valid &= currentStats.accelTriggersCount < 1000000;
-    valid &= currentStats.highestAccelReading >= 0 && currentStats.highestAccelReading < 10000;
-    valid &= currentStats.totalFireTime >= 0 && currentStats.totalFireTime < 1000000;
+    valid &= state.currentStats.remoteTriggersCount < 1000000;  // Reasonable maximum
+    valid &= state.currentStats.accelTriggersCount < 1000000;
+    valid &= state.currentStats.highestAccelReading >= 0 && state.currentStats.highestAccelReading < 10000;
+    valid &= state.currentStats.totalFireTime >= 0 && state.currentStats.totalFireTime < 1000000;
     
     if (!valid) {
         loadDefaultStats();
@@ -191,8 +222,8 @@ bool loadStats() {
 
 // Add these functions for EEPROM management
 bool saveSettings() {
-    EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_NUMBER);
-    EEPROM.put(EEPROM_DATA_ADDR, currentSettings);
+    EEPROM.write(EEPROMConfig::EEPROM_MAGIC_ADDR, EEPROMConfig::EEPROM_MAGIC_NUMBER);
+    EEPROM.put(EEPROMConfig::EEPROM_DATA_ADDR, state.currentSettings);
     if (!EEPROM.commit()) {
         Serial.println("Error: Failed to commit settings to EEPROM");
         return false;
@@ -201,35 +232,35 @@ bool saveSettings() {
 }
 
 void loadDefaultSettings() {
-    currentSettings = DEFAULT_SETTINGS;
+    state.currentSettings = DEFAULT_SETTINGS;
     // Update global variables
-    MIN_FIRE_TIME = currentSettings.minFireTime;
-    MAX_FIRE_TIME = currentSettings.maxFireTime;
-    REMOTE_FIRE_TIME = currentSettings.remoteFireTime;
-    RESET_LIMIT = currentSettings.resetLimit;
-    FIRE_CYCLE = currentSettings.fireCycle;
-    MIN_GYRO = currentSettings.minGyro;
-    MAX_GYRO = currentSettings.maxGyro;
+    state.minFireTime = state.currentSettings.minFireTime;
+    state.maxFireTime = state.currentSettings.maxFireTime;
+    state.remoteFireTime = state.currentSettings.remoteFireTime;
+    state.resetLimit = state.currentSettings.resetLimit;
+    state.fireCycle = state.currentSettings.fireCycle;
+    state.minGyro = state.currentSettings.minGyro;
+    state.maxGyro = state.currentSettings.maxGyro;
 }
 
 bool loadSettings() {
-    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_NUMBER) {
+    if (EEPROM.read(EEPROMConfig::EEPROM_MAGIC_ADDR) != EEPROMConfig::EEPROM_MAGIC_NUMBER) {
         loadDefaultSettings();
         return false;
     }
     
-    EEPROM.get(EEPROM_DATA_ADDR, currentSettings);
+    EEPROM.get(EEPROMConfig::EEPROM_DATA_ADDR, state.currentSettings);
     
     // Validate loaded values
     bool valid = true;
-    valid &= currentSettings.minFireTime > 0 && currentSettings.minFireTime < 60;
-    valid &= currentSettings.maxFireTime > 0 && currentSettings.maxFireTime < 60;
-    valid &= currentSettings.remoteFireTime > 0 && currentSettings.remoteFireTime < 60;
-    valid &= currentSettings.resetLimit > 0 && currentSettings.resetLimit < 60;
-    valid &= currentSettings.fireCycle >= 0 && currentSettings.fireCycle < 60;
-    valid &= currentSettings.minGyro > 0 && currentSettings.minGyro < 1000;
-    valid &= currentSettings.maxGyro > 0 && currentSettings.maxGyro < 2000;
-    valid &= currentSettings.minGyro < currentSettings.maxGyro;
+    valid &= state.currentSettings.minFireTime > 0 && state.currentSettings.minFireTime < 60;
+    valid &= state.currentSettings.maxFireTime > 0 && state.currentSettings.maxFireTime < 60;
+    valid &= state.currentSettings.remoteFireTime > 0 && state.currentSettings.remoteFireTime < 60;
+    valid &= state.currentSettings.resetLimit > 0 && state.currentSettings.resetLimit < 60;
+    valid &= state.currentSettings.fireCycle >= 0 && state.currentSettings.fireCycle < 60;
+    valid &= state.currentSettings.minGyro > 0 && state.currentSettings.minGyro < 1000;
+    valid &= state.currentSettings.maxGyro > 0 && state.currentSettings.maxGyro < 2000;
+    valid &= state.currentSettings.minGyro < state.currentSettings.maxGyro;
     
     if (!valid) {
         loadDefaultSettings();
@@ -237,14 +268,14 @@ bool loadSettings() {
     }
     
     // Update global variables
-    MIN_FIRE_TIME = currentSettings.minFireTime;
-    MAX_FIRE_TIME = currentSettings.maxFireTime;
-    REMOTE_FIRE_TIME = currentSettings.remoteFireTime;
-    RESET_LIMIT = currentSettings.resetLimit;
-    FIRE_CYCLE = currentSettings.fireCycle;
-    MIN_GYRO = currentSettings.minGyro;
-    MAX_GYRO = currentSettings.maxGyro;
-    RESET_TIMER = RESET_LIMIT;
+    state.minFireTime = state.currentSettings.minFireTime;
+    state.maxFireTime = state.currentSettings.maxFireTime;
+    state.remoteFireTime = state.currentSettings.remoteFireTime;
+    state.resetLimit = state.currentSettings.resetLimit;
+    state.fireCycle = state.currentSettings.fireCycle;
+    state.minGyro = state.currentSettings.minGyro;
+    state.maxGyro = state.currentSettings.maxGyro;
+    state.resetTimer = state.resetLimit;
     return true;
 }
 
@@ -312,18 +343,18 @@ String prepare_Data_Page()
             "</script>" +
             "</HEAD>" +
             "<BODY style='font-size:300%;background-color:black;color:white'>" +
-            "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span></h3>" +
-            "<h3>Reset Limit [sec]: <span id='resetLimit'>" + String(RESET_LIMIT, 2) + "</span></h3>" +
-            "<h3>Reset State: <span id='resetState'>" + RESET_STATE + "</span></h3>" +
-            "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(FIRE_TIMER, 2) + "</span></h3>" +
-            "<h3>Fire Time Limit [sec]: <span id='fireTimeLimit'>" + String(FIRE_TIME_LIMIT, 2) + "</span></h3>" +
-            "<h3>REMOTE_TRIGGER_STATE: <span id='remoteTrigger'>" + REMOTE_TRIGGER_STATE + "</span></h3>" +
-            "<h3>LOCAL_TRIGGER_STATE_1: <span id='localTrigger1'>" + digitalRead(MANUAL_TRIGGER_1) + "</span></h3>" +
-            "<h3>LOCAL_TRIGGER_STATE_2: <span id='localTrigger2'>" + digitalRead(MANUAL_TRIGGER_2) + "</span></h3>" +
-            "<h3>FIRE_ON: <span id='fireOn'>" + FIRE_ON + "</span></h3>" +
-            "<h3>ACCEL_1: <span id='accel1'>" + String(ACCEL_1[8], 2) + "</span></h3>" +
-            "<h3>ACCEL_2: <span id='accel2'>" + String(ACCEL_2[8], 2) + "</span></h3>" +
-            "<h3>AVE_GYRO: <span id='aveGyro'>" + String(AVE_GYRO, 2) + "</span></h3>" +
+            "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(state.resetTimer, 2) + "</span></h3>" +
+            "<h3>Reset Limit [sec]: <span id='resetLimit'>" + String(state.resetLimit, 2) + "</span></h3>" +
+            "<h3>Reset State: <span id='resetState'>" + state.resetState + "</span></h3>" +
+            "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(state.fireTimer, 2) + "</span></h3>" +
+            "<h3>Fire Time Limit [sec]: <span id='fireTimeLimit'>" + String(state.fireTimeLimit, 2) + "</span></h3>" +
+            "<h3>REMOTE_TRIGGER_STATE: <span id='remoteTrigger'>" + state.remoteTriggerState + "</span></h3>" +
+            "<h3>LOCAL_TRIGGER_STATE_1: <span id='localTrigger1'>" + digitalRead(state.MANUAL_TRIGGER_1) + "</span></h3>" +
+            "<h3>LOCAL_TRIGGER_STATE_2: <span id='localTrigger2'>" + digitalRead(state.MANUAL_TRIGGER_2) + "</span></h3>" +
+            "<h3>FIRE_ON: <span id='fireOn'>" + state.fireOn + "</span></h3>" +
+            "<h3>ACCEL_1: <span id='accel1'>" + String(state.accel1[8], 2) + "</span></h3>" +
+            "<h3>ACCEL_2: <span id='accel2'>" + String(state.accel2[8], 2) + "</span></h3>" +
+            "<h3>AVE_GYRO: <span id='aveGyro'>" + String(state.aveGyro, 2) + "</span></h3>" +
             "<br>" +
             "<p><a href='/'>Root Page</a></p>" +
             "<p><a href='/settings'>Settings Control Page</a></p>" +
@@ -431,12 +462,12 @@ String prepare_Fire_Control_Page() {
     htmlPage += "<div class='status-left' id='pin1Status'>🟢</div>";
     htmlPage += "<div class='status-right' id='pin2Status'>🟢</div>";
     htmlPage += "<div class='main-content'>";
-    htmlPage += "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(RESET_TIMER, 2) + "</span> / " + String(RESET_LIMIT, 2) + "</h3>";
-    htmlPage += "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(FIRE_TIMER, 2) + "</span> / <span id='fireTimeLimit'>" + String(FIRE_TIME_LIMIT, 2) + "</span></h3>";
+    htmlPage += "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(state.resetTimer, 2) + "</span> / " + String(state.resetLimit, 2) + "</h3>";
+    htmlPage += "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(state.fireTimer, 2) + "</span> / <span id='fireTimeLimit'>" + String(state.fireTimeLimit, 2) + "</span></h3>";
     htmlPage += "<br>";
     // Initial button state based on current conditions
-    String initialColor = FIRE_ON ? "red" : (RESET_TIMER < RESET_LIMIT ? "grey" : "green");
-    String initialDisabled = (FIRE_ON || RESET_TIMER < RESET_LIMIT) ? "disabled" : "";
+    String initialColor = state.fireOn ? "red" : (state.resetTimer < state.resetLimit ? "grey" : "green");
+    String initialDisabled = (state.fireOn || state.resetTimer < state.resetLimit) ? "disabled" : "";
     htmlPage += "<button id='fireButton' class='button' onclick='return fireTrigger();' style='background-color: " + initialColor + "' " + initialDisabled + ">FIRE!</button>";
     htmlPage += "<br>";
     htmlPage += "<p><a href='/'>Root Page</a></p>";
@@ -499,13 +530,13 @@ String prepare_Fire_Settings_Page()
             "</HEAD>" +
             "<BODY style='font-size:300%;background-color:black;color:white'>" +
             "<form id='settingsForm' onsubmit='submitSettings(event)' method='POST' enctype='application/x-www-form-urlencoded'>" +  // Added method and enctype
-            "MIN Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MIN_GYRO' value='" + MIN_GYRO + "'><br>" +
-            "MAX Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MAX_GYRO' value='" + MAX_GYRO + "'><br>" +
-            "MIN Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MIN_FIRE_TIME' value='" + MIN_FIRE_TIME + "'><br>" +
-            "MAX Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MAX_FIRE_TIME' value='" + MAX_FIRE_TIME + "'><br>" +
-            "RESET Time Limit [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='RESET_LIMIT' value='" + RESET_LIMIT + "'><br>" +
-            "Fire Cycle Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='FIRE_CYCLE' value='" + FIRE_CYCLE + "'><br>" +
-            "Remote Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='REMOTE_FIRE_TIME' value='" + REMOTE_FIRE_TIME + "'><br><br><br>" +
+            "MIN Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MIN_GYRO' value='" + state.minGyro + "'><br>" +
+            "MAX Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MAX_GYRO' value='" + state.maxGyro + "'><br>" +
+            "MIN Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MIN_FIRE_TIME' value='" + state.minFireTime + "'><br>" +
+            "MAX Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MAX_FIRE_TIME' value='" + state.maxFireTime + "'><br>" +
+            "RESET Time Limit [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='RESET_LIMIT' value='" + state.resetLimit + "'><br>" +
+            "Fire Cycle Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='FIRE_CYCLE' value='" + state.fireCycle + "'><br>" +
+            "Remote Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='REMOTE_FIRE_TIME' value='" + state.remoteFireTime + "'><br><br><br>" +
             "<input type='submit' style='font-size:300%;color:red' value='UPDATE'>" +
             "</form>" +
             "<br>" +
@@ -548,25 +579,25 @@ String prepare_Stats_Page() {
     htmlPage += "<h2>System Statistics</h2>";
     htmlPage += "<div class='stat-box'>";
     htmlPage += "<h3>Trigger Statistics</h3>";
-    htmlPage += "<p>Remote Triggers: " + String(currentStats.remoteTriggersCount) + "</p>";
-    htmlPage += "<p>Accelerometer Triggers: " + String(currentStats.accelTriggersCount) + "</p>";
+    htmlPage += "<p>Remote Triggers: " + String(state.currentStats.remoteTriggersCount) + "</p>";
+    htmlPage += "<p>Accelerometer Triggers: " + String(state.currentStats.accelTriggersCount) + "</p>";
     
     htmlPage += "<h3>Acceleration Data</h3>";
-    htmlPage += "<p>Highest Acceleration: " + String(currentStats.highestAccelReading, 2) + " g</p>";
-    htmlPage += "<p>Average Trigger Acceleration: " + String(currentStats.averageAccelTrigger, 2) + " g</p>";
+    htmlPage += "<p>Highest Acceleration: " + String(state.currentStats.highestAccelReading, 2) + " g</p>";
+    htmlPage += "<p>Average Trigger Acceleration: " + String(state.currentStats.averageAccelTrigger, 2) + " g</p>";
     
     htmlPage += "<h3>Fire Duration</h3>";
     // Convert total fire time to hours:minutes:seconds
-    unsigned long totalSeconds = (unsigned long)currentStats.totalFireTime;
+    unsigned long totalSeconds = (unsigned long)state.currentStats.totalFireTime;
     unsigned long hours = totalSeconds / 3600;
     unsigned long minutes = (totalSeconds % 3600) / 60;
     unsigned long seconds = totalSeconds % 60;
     
     htmlPage += "<p>Total Fire Time: " + String(hours) + "h " + String(minutes) + "m " + String(seconds) + "s</p>";
-    htmlPage += "<p>Longest Single Fire: " + String(currentStats.longestFireDuration, 1) + " seconds</p>";
+    htmlPage += "<p>Longest Single Fire: " + String(state.currentStats.longestFireDuration, 1) + " seconds</p>";
     
     htmlPage += "<h3>System Resources</h3>";
-    htmlPage += "<p>Peak Memory Usage: " + String(currentStats.peakMemoryUsage, 1) + "%</p>";
+    htmlPage += "<p>Peak Memory Usage: " + String(state.currentStats.peakMemoryUsage, 1) + "%</p>";
     htmlPage += "</div>";
     
     htmlPage += "<button class='reset-btn' onclick='resetStats()'>Reset Statistics</button>";
@@ -582,29 +613,29 @@ String prepare_Stats_Page() {
 void handle_Stats_Reset() {
     loadDefaultStats();
     if (!saveStats()) {
-        server.send(500, "text/plain", "Failed to reset statistics");
+        state.server.send(500, "text/plain", "Failed to reset statistics");
         return;
     }
-    server.send(200, "text/plain", "Statistics reset successfully");
+    state.server.send(200, "text/plain", "Statistics reset successfully");
 }
 
 void handle_Stats_Page() {
-    server.send(200, "text/html", prepare_Stats_Page());
+    state.server.send(200, "text/html", prepare_Stats_Page());
 }
 
 //===============================================================
 // This routine is executed when you open its IP in browser
 //===============================================================
 void handleRoot() {
-  server.sendHeader("Cache-Control", "max-age=3600"); // Cache for 1 hour
-  server.send(200, "text/html", prepare_Root_Page());
+    state.server.sendHeader("Cache-Control", "max-age=3600");
+    state.server.send(200, "text/html", prepare_Root_Page());
 }
 
 //===============================================================
 // This routine is executed when you open the fire control page
 //===============================================================
 void handle_Fire_Control_Page() {
-  server.send(200, "text/html", prepare_Fire_Control_Page());
+  state.server.send(200, "text/html", prepare_Fire_Control_Page());
 }
 
 //===============================================================
@@ -615,32 +646,32 @@ void handle_Fire_Control_ON_Page() {
     unsigned long currentTime = millis();
     
     if (currentTime - lastFireTime < 1000) {
-        server.send(429, "text/plain", "Too many requests");
+        state.server.send(429, "text/plain", "Too many requests");
         return;
     }
     
     startFire();
-    FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;
-    FIRE_TIMER = 0;
-    RESET_TIMER = 0;
-    RESET_STATE = 0;
+    state.fireTimeLimit = state.remoteFireTime;
+    state.fireTimer = 0;
+    state.resetTimer = 0;
+    state.resetState = 0;
     
     lastFireTime = currentTime;
-    server.send(200, "text/plain", "OK");
+    state.server.send(200, "text/plain", "OK");
 }
 
 //===============================================================
 // This routine is executed when you open the fire settings page
 //===============================================================
 void handle_Fire_Settings_Page() {
-  server.send(200, "text/html", prepare_Fire_Settings_Page());
+  state.server.send(200, "text/html", prepare_Fire_Settings_Page());
 }
 
 //===============================================================
 // This routine is executed when you open the data page
 //===============================================================
 void handle_Data_Page() {
-  server.send(200, "text/html", prepare_Data_Page());
+  state.server.send(200, "text/html", prepare_Data_Page());
 }
 
 //===============================================================
@@ -650,13 +681,13 @@ void handleForm() {
     Serial.println("Form handler called"); // Debug print
     
     // Print all received arguments for debugging
-    for (int i = 0; i < server.args(); i++) {
-        Serial.printf("Arg %d: %s = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
+    for (int i = 0; i < state.server.args(); i++) {
+        Serial.printf("Arg %d: %s = %s\n", i, state.server.argName(i).c_str(), state.server.arg(i).c_str());
     }
 
     // Remove the check for "plain" data since we're handling form data
-    if (server.args() == 0) {
-        server.send(400, "text/plain", "No data received");
+    if (state.server.args() == 0) {
+        state.server.send(400, "text/plain", "No data received");
         return;
     }
 
@@ -666,51 +697,53 @@ void handleForm() {
 void handleResetDefaults() {
     loadDefaultSettings();
     saveSettings();
-    server.send(200, "text/html", prepare_Fire_Settings_Page());
+    state.server.send(200, "text/html", prepare_Fire_Settings_Page());
 }
 
 void handle_Data_Status() {
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
+  state.server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  state.server.sendHeader("Pragma", "no-cache");
+  state.server.sendHeader("Expires", "-1");
   // Pre-allocate string space
   String json;
   json.reserve(512); // Adjust size as needed
   
   json += "{";
-  json += "\"resetTimer\":" + String(RESET_TIMER, 2) + ",";
-  json += "\"resetLimit\":" + String(RESET_LIMIT, 2) + ",";
-  json += "\"resetState\":" + String(RESET_STATE) + ",";
-  json += "\"fireTimer\":" + String(FIRE_TIMER, 2) + ",";
-  json += "\"fireTimeLimit\":" + String(FIRE_TIME_LIMIT, 2) + ",";
-  json += "\"remoteTriggerState\":" + String(REMOTE_TRIGGER_STATE) + ",";
-  json += "\"localTriggerState1\":" + String(digitalRead(MANUAL_TRIGGER_1)) + ",";
-  json += "\"localTriggerState2\":" + String(digitalRead(MANUAL_TRIGGER_2)) + ",";
-  json += "\"fireOn\":" + String(FIRE_ON) + ",";
-  json += "\"accel1\":" + String(ACCEL_1[8], 2) + ",";
-  json += "\"accel2\":" + String(ACCEL_2[8], 2) + ",";
-  json += "\"aveGyro\":" + String(AVE_GYRO, 2);
+  json += "\"resetTimer\":" + String(state.resetTimer, 2) + ",";
+  json += "\"resetLimit\":" + String(state.resetLimit, 2) + ",";
+  json += "\"resetState\":" + String(state.resetState) + ",";
+  json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
+  json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
+  json += "\"remoteTriggerState\":" + String(state.remoteTriggerState) + ",";
+  json += "\"localTriggerState1\":" + String(digitalRead(state.MANUAL_TRIGGER_1)) + ",";
+  json += "\"localTriggerState2\":" + String(digitalRead(state.MANUAL_TRIGGER_2)) + ",";
+  json += "\"fireOn\":" + String(state.fireOn) + ",";
+  json += "\"accel1\":" + String(state.accel1[8], 2) + ",";
+  json += "\"accel2\":" + String(state.accel2[8], 2) + ",";
+  json += "\"aveGyro\":" + String(state.aveGyro, 2);
   json += "}";
-  server.send(200, "application/json", json);
+  state.server.send(200, "application/json", json);
 }
 
 void handle_Settings_Update() {
-    if (!server.hasArg("plain")) {
-        server.send(400, "text/plain", "No data received");
+    if (!state.server.hasArg("plain")) {
+        state.server.send(400, "text/plain", "No data received");
         return;
     }
 
-    String data = server.arg("plain");
+    String data = state.server.arg("plain");
     
-    // Parse JSON data
-    // Note: In production code, you should use a proper JSON parser
-    float newMinFireTime = server.arg("MIN_FIRE_TIME").toFloat();
-    float newMaxFireTime = server.arg("MAX_FIRE_TIME").toFloat();
-    float newResetLimit = server.arg("RESET_LIMIT").toFloat();
-    float newRemoteFireTime = server.arg("REMOTE_FIRE_TIME").toFloat();
-    float newFireCycle = server.arg("FIRE_CYCLE").toFloat();
-    float newMinGyro = server.arg("MIN_GYRO").toFloat();
-    float newMaxGyro = server.arg("MAX_GYRO").toFloat();
+    // Store old values for comparison
+    FireSettings oldSettings = state.currentSettings;
+    
+    // Parse form data
+    float newMinFireTime = state.server.arg("MIN_FIRE_TIME").toFloat();
+    float newMaxFireTime = state.server.arg("MAX_FIRE_TIME").toFloat();
+    float newResetLimit = state.server.arg("RESET_LIMIT").toFloat();
+    float newRemoteFireTime = state.server.arg("REMOTE_FIRE_TIME").toFloat();
+    float newFireCycle = state.server.arg("FIRE_CYCLE").toFloat();
+    float newMinGyro = state.server.arg("MIN_GYRO").toFloat();
+    float newMaxGyro = state.server.arg("MAX_GYRO").toFloat();
     
     // Validate input values
     if (newMinFireTime <= 0 || newMaxFireTime <= 0 || 
@@ -718,44 +751,88 @@ void handle_Settings_Update() {
         newFireCycle < 0 || newMinFireTime >= newMaxFireTime ||
         newMinGyro <= 0 || newMaxGyro <= 0 || 
         newMinGyro >= newMaxGyro || newMaxGyro > 2000) {
-        server.send(400, "text/plain", "Invalid values provided");
+        Serial.println(F("Settings update rejected - Invalid values"));
+        state.server.send(400, "text/plain", "Invalid values provided");
         return;
     }
     
+    // Log changes to serial
+    Serial.println(F("\n=== Settings Update ==="));
+    if (oldSettings.minFireTime != newMinFireTime)
+        Serial.printf("Min Fire Time: %.2f -> %.2f\n", oldSettings.minFireTime, newMinFireTime);
+    if (oldSettings.maxFireTime != newMaxFireTime)
+        Serial.printf("Max Fire Time: %.2f -> %.2f\n", oldSettings.maxFireTime, newMaxFireTime);
+    if (oldSettings.remoteFireTime != newRemoteFireTime)
+        Serial.printf("Remote Fire Time: %.2f -> %.2f\n", oldSettings.remoteFireTime, newRemoteFireTime);
+    if (oldSettings.resetLimit != newResetLimit)
+        Serial.printf("Reset Limit: %.2f -> %.2f\n", oldSettings.resetLimit, newResetLimit);
+    if (oldSettings.fireCycle != newFireCycle)
+        Serial.printf("Fire Cycle: %.2f -> %.2f\n", oldSettings.fireCycle, newFireCycle);
+    if (oldSettings.minGyro != newMinGyro)
+        Serial.printf("Min Gyro: %.2f -> %.2f\n", oldSettings.minGyro, newMinGyro);
+    if (oldSettings.maxGyro != newMaxGyro)
+        Serial.printf("Max Gyro: %.2f -> %.2f\n", oldSettings.maxGyro, newMaxGyro);
+    
     // Update settings
-    currentSettings.minFireTime = newMinFireTime;
-    currentSettings.maxFireTime = newMaxFireTime;
-    currentSettings.remoteFireTime = newRemoteFireTime;
-    currentSettings.resetLimit = newResetLimit;
-    currentSettings.fireCycle = newFireCycle;
-    currentSettings.minGyro = newMinGyro;
-    currentSettings.maxGyro = newMaxGyro;
+    state.currentSettings.minFireTime = newMinFireTime;
+    state.currentSettings.maxFireTime = newMaxFireTime;
+    state.currentSettings.remoteFireTime = newRemoteFireTime;
+    state.currentSettings.resetLimit = newResetLimit;
+    state.currentSettings.fireCycle = newFireCycle;
+    state.currentSettings.minGyro = newMinGyro;
+    state.currentSettings.maxGyro = newMaxGyro;
     
     // Update global variables
-    MIN_FIRE_TIME = newMinFireTime;
-    MAX_FIRE_TIME = newMaxFireTime;
-    RESET_LIMIT = newResetLimit;
-    REMOTE_FIRE_TIME = newRemoteFireTime;
-    FIRE_CYCLE = newFireCycle;
-    MIN_GYRO = newMinGyro;
-    MAX_GYRO = newMaxGyro;
+    state.minFireTime = newMinFireTime;
+    state.maxFireTime = newMaxFireTime;
+    state.resetLimit = newResetLimit;
+    state.remoteFireTime = newRemoteFireTime;
+    state.fireCycle = newFireCycle;
+    state.minGyro = newMinGyro;
+    state.maxGyro = newMaxGyro;
     
     // Save to EEPROM
     if (!saveSettings()) {
-        server.send(500, "text/plain", "Failed to save settings");
+        Serial.println(F("Failed to save settings to EEPROM"));
+        state.server.send(500, "text/plain", "Failed to save settings");
         return;
     }
     
-    server.send(200, "text/plain", "Settings updated successfully");
+    Serial.println(F("Settings updated and saved successfully"));
+    Serial.println(F("=====================\n"));
+    
+    state.server.send(200, "text/plain", "Settings updated successfully");
 }
 
 void handle_Settings_Reset() {
+    // Store old settings for comparison
+    FireSettings oldSettings = state.currentSettings;
+    
     loadDefaultSettings();
     if (!saveSettings()) {
-        server.send(500, "text/plain", "Failed to reset settings");
+        state.server.send(500, "text/plain", "Failed to reset settings");
         return;
     }
-    server.send(200, "text/plain", "Settings reset to defaults");
+
+    // Log changes to serial
+    Serial.println(F("\n=== Settings Reset to Defaults ==="));
+    if (oldSettings.minFireTime != state.currentSettings.minFireTime)
+        Serial.printf("Min Fire Time: %.2f -> %.2f\n", oldSettings.minFireTime, state.currentSettings.minFireTime);
+    if (oldSettings.maxFireTime != state.currentSettings.maxFireTime)
+        Serial.printf("Max Fire Time: %.2f -> %.2f\n", oldSettings.maxFireTime, state.currentSettings.maxFireTime);
+    if (oldSettings.remoteFireTime != state.currentSettings.remoteFireTime)
+        Serial.printf("Remote Fire Time: %.2f -> %.2f\n", oldSettings.remoteFireTime, state.currentSettings.remoteFireTime);
+    if (oldSettings.resetLimit != state.currentSettings.resetLimit)
+        Serial.printf("Reset Limit: %.2f -> %.2f\n", oldSettings.resetLimit, state.currentSettings.resetLimit);
+    if (oldSettings.fireCycle != state.currentSettings.fireCycle)
+        Serial.printf("Fire Cycle: %.2f -> %.2f\n", oldSettings.fireCycle, state.currentSettings.fireCycle);
+    if (oldSettings.minGyro != state.currentSettings.minGyro)
+        Serial.printf("Min Gyro: %.2f -> %.2f\n", oldSettings.minGyro, state.currentSettings.minGyro);
+    if (oldSettings.maxGyro != state.currentSettings.maxGyro)
+        Serial.printf("Max Gyro: %.2f -> %.2f\n", oldSettings.maxGyro, state.currentSettings.maxGyro);
+    Serial.println(F("=====================\n"));
+
+    state.server.send(200, "text/plain", "Settings reset to defaults");
 }
 
 void handle_Fire_Status() {
@@ -763,25 +840,23 @@ void handle_Fire_Status() {
     json.reserve(256);
     
     json = "{";
-    json += "\"fireOn\":" + String(FIRE_ON) + ",";
-    json += "\"resetTimer\":" + String(RESET_TIMER, 2) + ",";
-    json += "\"resetLimit\":" + String(RESET_LIMIT, 2) + ",";
-    json += "\"fireTimer\":" + String(FIRE_TIMER, 2) + ",";
-    json += "\"fireTimeLimit\":" + String(FIRE_TIME_LIMIT, 2) + ",";
-    json += "\"firePin1\":" + String(digitalRead(FIRE_PIN_1)) + ",";
-    json += "\"firePin2\":" + String(digitalRead(FIRE_PIN_2));
+    json += "\"fireOn\":" + String(state.fireOn) + ",";
+    json += "\"resetTimer\":" + String(state.resetTimer, 2) + ",";
+    json += "\"resetLimit\":" + String(state.resetLimit, 2) + ",";
+    json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
+    json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
+    json += "\"firePin1\":" + String(digitalRead(state.FIRE_PIN_1)) + ",";
+    json += "\"firePin2\":" + String(digitalRead(state.FIRE_PIN_2));
     json += "}";
     
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Cache-Control", "no-cache");
-    server.send(200, "application/json", json);
+    state.server.sendHeader("Access-Control-Allow-Origin", "*");
+    state.server.sendHeader("Cache-Control", "no-cache");
+    state.server.send(200, "application/json", json);
 }
 
 // Add these constants with other defines
 #define DNS_PORT 53
 
-// Add this global variable with other globals
-DNSServer dnsServer;
 
 void handleNotFound() {
     String ip = WiFi.softAPIP().toString();
@@ -811,74 +886,70 @@ void handleNotFound() {
         "</body>" +
         "</html>";
     
-    server.send(200, "text/html", html);
+    state.server.send(200, "text/html", html);
 }
 
 void start_wifi(){
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP("HighNoon", "shaboinky", 1, 0, 8);
-  
-  // Configure DNS server to redirect all domains to our IP
-  IPAddress apIP = WiFi.softAPIP();
-  dnsServer.start(DNS_PORT, "*", apIP);
-  
-  // Add WiFi power management
-  WiFi.setOutputPower(20.5); // Max WiFi power
-  WiFi.setSleepMode(WIFI_NONE_SLEEP); // Disable WiFi sleep mode
-  
-  // Increase the TCP MSS for better performance
-  WiFi.setPhyMode(WIFI_PHY_MODE_11N); // Use 802.11n mode
-  
-  delay(500);
-  
-  // Remove this line that caused the error:
-  // server.enableCrossOrigin(true);
-  
-  // Instead, add CORS headers to your request handlers
-  server.onNotFound([]() {
-      server.sendHeader("Access-Control-Allow-Origin", "*");
-      handleNotFound();
-  });
+    // Initialize WiFi in Access Point mode and create captive portal
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("HighNoon", "shaboinky", 1, 0, 8);
+    
+    // Configure DNS server to redirect all domains to our IP
+    IPAddress apIP = WiFi.softAPIP();
+    state.dnsServer.start(DNS_PORT, "*", apIP);
+    
+    // Add WiFi power management
+    WiFi.setOutputPower(20.5); // Max WiFi power
+    WiFi.setSleepMode(WIFI_NONE_SLEEP); // Disable WiFi sleep mode
+    
+    // Increase the TCP MSS for better performance
+    WiFi.setPhyMode(WIFI_PHY_MODE_11N); // Use 802.11n mode
+    
+    delay(500);
+    
+    // Add CORS headers to your request handlers
+    state.server.onNotFound([]() {
+        state.server.sendHeader("Access-Control-Allow-Origin", "*");
+        handleNotFound();
+    });
 
-  // Add CORS headers to your existing handlers
-  server.on("/", HTTP_GET, []() {
-      server.sendHeader("Access-Control-Allow-Origin", "*");
-      handleRoot();
-  });
+    // Add special URLs that mobile devices check for captive portals
+    state.server.on("/generate_204", handleNotFound);  // Android
+    state.server.on("/fwlink", handleNotFound);        // Microsoft
+    state.server.on("/redirect", handleNotFound);      // Apple
+    state.server.on("/hotspot-detect.html", handleNotFound); // Apple
+    state.server.on("/canonical.html", handleNotFound); // Apple
+    state.server.on("/success.txt", handleNotFound);    // Apple
+    
+    // Your existing endpoints...
+    state.server.on("/", HTTP_GET, []() {
+        state.server.sendHeader("Access-Control-Allow-Origin", "*");
+        handleRoot();
+    });
+    state.server.on("/fire", HTTP_GET, handle_Fire_Control_Page);
+    state.server.on("/fire/on", HTTP_GET, handle_Fire_Control_ON_Page);
+    state.server.on("/fire/status", HTTP_GET, handle_Fire_Status);
+    state.server.on("/settings", HTTP_GET, handle_Fire_Settings_Page);
+    state.server.on("/settings/action_page", HTTP_POST, handle_Settings_Update);
+    state.server.on("/settings/reset", HTTP_POST, handle_Settings_Reset);
+    state.server.on("/data", HTTP_GET, handle_Data_Page);
+    state.server.on("/data/status", HTTP_GET, handle_Data_Status);
+    state.server.on("/stats", HTTP_GET, []() {
+        state.server.sendHeader("Access-Control-Allow-Origin", "*");
+        handle_Stats_Page();
+    });
+    state.server.on("/stats/reset", HTTP_POST, []() {
+        state.server.sendHeader("Access-Control-Allow-Origin", "*");
+        handle_Stats_Reset();
+    });
 
-  // Add special URLs that mobile devices check for captive portals
-  server.on("/generate_204", handleNotFound);  // Android
-  server.on("/fwlink", handleNotFound);        // Microsoft
-  server.on("/redirect", handleNotFound);      // Apple
-  server.on("/hotspot-detect.html", handleNotFound); // Apple
-  server.on("/canonical.html", handleNotFound); // Apple
-  server.on("/success.txt", handleNotFound);    // Apple
-  
-  // Your existing endpoints...
-  server.on("/fire", HTTP_GET, handle_Fire_Control_Page);
-  server.on("/fire/on", HTTP_GET, handle_Fire_Control_ON_Page);
-  server.on("/fire/status", HTTP_GET, handle_Fire_Status);
-  server.on("/settings", HTTP_GET, handle_Fire_Settings_Page);
-  server.on("/settings/action_page", HTTP_POST, handle_Settings_Update);
-  server.on("/settings/reset", HTTP_POST, handle_Settings_Reset);
-  server.on("/data", HTTP_GET, handle_Data_Page);
-  server.on("/data/status", HTTP_GET, handle_Data_Status);
-  server.on("/stats", HTTP_GET, []() {
-      server.sendHeader("Access-Control-Allow-Origin", "*");
-      handle_Stats_Page();
-  });
-  server.on("/stats/reset", HTTP_POST, []() {
-      server.sendHeader("Access-Control-Allow-Origin", "*");
-      handle_Stats_Reset();
-  });
-
-  server.begin();
-  Serial.println("Web server started");
-  Serial.print("IP: "); Serial.println(WiFi.softAPIP());
-  Serial.print("MAC: "); Serial.println(WiFi.softAPmacAddress());
+    state.server.begin();
+    Serial.println("Web server started");
+    Serial.print("IP: "); Serial.println(WiFi.softAPIP());
+    Serial.print("MAC: "); Serial.println(WiFi.softAPmacAddress());
 }
 
-static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROM_DATA_ADDR <= EEPROM_SIZE, 
+static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROMConfig::EEPROM_DATA_ADDR <= EEPROMConfig::EEPROM_SIZE, 
     "Combined settings and stats too large for EEPROM");
 
 /**
@@ -955,226 +1026,231 @@ int I2C_ClearBus() {
   return 0; // all ok
 }
 
-void start_I2C_communication(int MPU){
-  
-  int rtn = I2C_ClearBus(); // clear the I2C bus first before calling Wire.begin()
-  if (rtn != 0) {
-    Serial.println(F("I2C bus error. Could not clear"));
-    if (rtn == 1) {
-      Serial.println(F("SCL clock line held low"));
-    } else if (rtn == 2) {
-      Serial.println(F("SCL clock line held low by slave clock stretch"));
-    } else if (rtn == 3) {
-      Serial.println(F("SDA data line held low"));
+void start_I2C_communication(int MPU) {
+    int rtn = I2C_ClearBus(); // clear the I2C bus first before calling Wire.begin()
+    if (rtn != 0) {
+        Serial.println(F("I2C bus error. Could not clear"));
+        if (rtn == 1) {
+            Serial.println(F("SCL clock line held low"));
+        } else if (rtn == 2) {
+            Serial.println(F("SCL clock line held low by slave clock stretch"));
+        } else if (rtn == 3) {
+            Serial.println(F("SDA data line held low"));
+        }
+    } else { // bus clear
+        Wire.begin();
     }
-  } else { // bus clear
-    // re-enable Wire
-    // now can start Wire Arduino master
-    Wire.begin();
-  }
-  Serial.println("setup finished");
+    Serial.println("setup finished");
 
-  Wire.beginTransmission(MPU);
-  Wire.write(0x6B); 
-  Wire.write(0);
-  Wire.endTransmission(true);
+    Wire.beginTransmission(MPU);
+    Wire.write(0x6B); 
+    Wire.write(0);
+    Wire.endTransmission(true);
 
-  // Turn on Low Pass Fiter:
+    // Turn on Low Pass Filter:
     Wire.beginTransmission(MPU);  
     Wire.write(0x1A); 
-    //Wire.write(B00000000); // Level 0
-    //Wire.write(B00000001); // Level 1
-    //Wire.write(B00000010); // Level 2
     Wire.write(B00000011); // Level 3
-    //Wire.write(B00000100); // Level 4
-    //Wire.write(B00000101); // Level 5
-    //Wire.write(B00000110); // Level 6
     Wire.endTransmission(true);
 
-  // Set gyro full scale Range:
+    // Set gyro full scale Range:
     Wire.beginTransmission(MPU);  
     Wire.write(0x1B); 
-    //Wire.write(B00000000);GYRO_FACTOR=131.0;  // +/- 250 deg/s
-    //Wire.write(B00001000);GYRO_FACTOR=65.5;  // +/- 500 deg/s
-    //Wire.write(B00010000);GYRO_FACTOR=32.8;  // +/- 1000 deg/s
-    Wire.write(B00011000);GYRO_FACTOR=16.4;  // +/- 2000 deg/s
+    Wire.write(B00011000);
+    state.gyroFactor = 16.4;  // +/- 2000 deg/s
     Wire.endTransmission(true);
 
-  // Set accel full scale Range:
+    // Set accel full scale Range:
     Wire.beginTransmission(MPU);  
     Wire.write(0x1C); 
-    Wire.write(B00000000);ACCEL_FACTOR=16384;  // +/- 2g
-    Wire.write(B00001000);ACCEL_FACTOR=8192;  // +/- 4g
-    Wire.write(B00010000);ACCEL_FACTOR=4096;  // +/- 8g
-    Wire.write(B00011000);ACCEL_FACTOR=2048;  // +/- 16g
+    Wire.write(B00000000);
+    state.accelFactor = 16384;  // +/- 2g
+    Wire.write(B00001000);
+    state.accelFactor = 8192;   // +/- 4g
+    Wire.write(B00010000);
+    state.accelFactor = 4096;   // +/- 8g
+    Wire.write(B00011000);
+    state.accelFactor = 2048;   // +/- 16g
     Wire.endTransmission(true);
 }
 
-void get_accel_data(int MPU, int16_t output_array[9]){
-  // Note: output_array must be a GLOBAL array variable
+void get_accel_data(int MPU, int16_t output_array[9]) {
+    // Note: output_array must be a GLOBAL array variable
 
-  Wire.beginTransmission(MPU);
-  Wire.write(0x3B);  
-  Wire.endTransmission(false);
-  Wire.requestFrom(MPU,14,1);
-  //Wire.requestFrom(MPU,14,true);
+    Wire.beginTransmission(MPU);
+    Wire.write(0x3B);  
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU,14,1);
+    //Wire.requestFrom(MPU,14,true);
 
-  int i = 0;
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcX
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcY
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcZ
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // Tmp
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyX
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyY
-  output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyZ
+    int i = 0;
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcX
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcY
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcZ
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // Tmp
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyX
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyY
+    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyZ
 
-  output_array[0] = output_array[0] / ACCEL_FACTOR;  //Convert accel to units of g
-  output_array[1] = output_array[1] / ACCEL_FACTOR;  //Convert accel to units of g
-  output_array[2] = output_array[2] / ACCEL_FACTOR;  //Convert accel to units of g
-  output_array[3] = output_array[3] / 340;           //Convert Temp to units of degrees C
-  output_array[4] = output_array[4] / GYRO_FACTOR;   //Convert gyro to units of degree / sec
-  output_array[5] = output_array[5] / GYRO_FACTOR;   //Convert gyro to units of degree / sec
-  output_array[6] = output_array[6] / GYRO_FACTOR;   //Convert gyro to units of degree / sec
+    output_array[0] = output_array[0] / state.accelFactor;  // Convert accel to units of g
+    output_array[1] = output_array[1] / state.accelFactor;  // Convert accel to units of g
+    output_array[2] = output_array[2] / state.accelFactor;  // Convert accel to units of g
+    output_array[3] = output_array[3] / 340;                // Convert Temp to units of degrees C
+    output_array[4] = output_array[4] / state.gyroFactor;   // Convert gyro to units of degree / sec
+    output_array[5] = output_array[5] / state.gyroFactor;   // Convert gyro to units of degree / sec
+    output_array[6] = output_array[6] / state.gyroFactor;   // Convert gyro to units of degree / sec
 
-  output_array[7] = sqrt(sq(output_array[0])+sq(output_array[1])+sq(output_array[2])); // Mag. of acceleration
-  output_array[8] = sqrt(sq(output_array[4])+sq(output_array[5])+sq(output_array[6])); // Mag. of rotation
-  output_array[7] = abs(output_array[7]);
-  output_array[8] = abs(output_array[8]);
+    output_array[7] = sqrt(sq(output_array[0])+sq(output_array[1])+sq(output_array[2])); // Mag. of acceleration
+    output_array[8] = sqrt(sq(output_array[4])+sq(output_array[5])+sq(output_array[6])); // Mag. of rotation
+    output_array[7] = abs(output_array[7]);
+    output_array[8] = abs(output_array[8]);
 }
 
 void setup() {
-  // Add watchdog timer
-  ESP.wdtEnable(WDTO_8S);
+    // Add watchdog timer
+    ESP.wdtEnable(WDTO_8S);
   
-  // Initialize the serial port
+    // Initialize the serial port
     Serial.begin(9600);
 
-  start_I2C_communication(MPU_1);
-  start_I2C_communication(MPU_2);
-  start_wifi();
+    start_I2C_communication(state.MPU_1);
+    start_I2C_communication(state.MPU_2);
+    start_wifi();
  
+    // Configure pins as outputs/inputs
+    pinMode(state.FIRE_PIN_1, OUTPUT);
+    pinMode(state.FIRE_PIN_2, OUTPUT);
+    pinMode(state.MANUAL_TRIGGER_1, INPUT_PULLUP);
+    pinMode(state.MANUAL_TRIGGER_2, INPUT_PULLUP);
 
-  // Configure pin as an output
-    pinMode(FIRE_PIN_1, OUTPUT);
-    pinMode(FIRE_PIN_2, OUTPUT);
-  // Configure BUTTON pin as an input with a pullup
-    pinMode(MANUAL_TRIGGER_1, INPUT_PULLUP);
-    pinMode(MANUAL_TRIGGER_2, INPUT_PULLUP);
-
-  // Initialize EEPROM
-  EEPROM.begin(EEPROM_SIZE);
-  loadSettings();
-  loadStats();
+    // Initialize EEPROM
+    EEPROM.begin(EEPROMConfig::EEPROM_SIZE);
+    loadSettings();
+    loadStats();
 }
 
 void loop() {
-    dnsServer.processNextRequest();
+    // Main control loop with watchdog protection
+    state.dnsServer.processNextRequest();
+    state.server.handleClient();
     
+    // Use micros() for more precise timing
     static unsigned long lastUpdate = 0;
-    const unsigned long updateInterval = LOOP_RATE * 1000; // Convert to milliseconds
+    static unsigned long lastFireCycleUpdate = 0;
+    const unsigned long updateInterval = state.loopRate * 1000000; // Convert to microseconds
     
-    unsigned long currentMillis = millis();
+    unsigned long currentMicros = micros();
     
-    // Handle client requests as frequently as possible
-    server.handleClient();
-    
-    // Only update sensors and fire control at the specified LOOP_RATE
-    if (currentMillis - lastUpdate >= updateInterval) {
-        lastUpdate = currentMillis;
+    // Update sensors and main control at specified interval
+    if (currentMicros - lastUpdate >= updateInterval) {
+        lastUpdate = currentMicros;
         
         // Get sensor data
-        get_accel_data(MPU_1, ACCEL_1);
-        get_accel_data(MPU_2, ACCEL_2);
+        get_accel_data(state.MPU_1, state.accel1);
+        get_accel_data(state.MPU_2, state.accel2);
         
         // Calculate average gyro reading
-        AVE_GYRO = (ACCEL_1[8] + ACCEL_2[8]) / 2.0;
+        state.aveGyro = (state.accel1[8] + state.accel2[8]) / 2.0;
         
         // Check manual triggers
-        LOCAL_TRIGGER_STATE_1 = digitalRead(MANUAL_TRIGGER_1);
-        LOCAL_TRIGGER_STATE_2 = digitalRead(MANUAL_TRIGGER_2);
+        state.localTriggerState1 = digitalRead(state.MANUAL_TRIGGER_1);
+        state.localTriggerState2 = digitalRead(state.MANUAL_TRIGGER_2);
         
         // Determine if we should trigger based on acceleration
-        if (AVE_GYRO > MIN_GYRO && RESET_TIMER >= RESET_LIMIT && !FIRE_ON) {
+        if (state.aveGyro > state.minGyro && state.resetTimer >= state.resetLimit && !state.fireOn) {
             // Calculate fire duration based on gyro reading
-            float scale = (AVE_GYRO - MIN_GYRO) / (MAX_GYRO - MIN_GYRO);
+            float scale = (state.aveGyro - state.minGyro) / (state.maxGyro - state.minGyro);
             scale = constrain(scale, 0.0, 1.0);
-            FIRE_TIME_LIMIT = MIN_FIRE_TIME + scale * (MAX_FIRE_TIME - MIN_FIRE_TIME);
+            state.fireTimeLimit = state.minFireTime + scale * (state.maxFireTime - state.minFireTime);
             
             startFire();
-            currentStats.accelTriggersCount++;
+            state.currentStats.accelTriggersCount++;
             
             // Update acceleration statistics
-            if (AVE_GYRO > currentStats.highestAccelReading) {
-                currentStats.highestAccelReading = AVE_GYRO;
+            if (state.aveGyro > state.currentStats.highestAccelReading) {
+                state.currentStats.highestAccelReading = state.aveGyro;
             }
-            currentStats.averageAccelTrigger = 
-                (currentStats.averageAccelTrigger * (currentStats.accelTriggersCount - 1) + AVE_GYRO) 
-                / currentStats.accelTriggersCount;
+            state.currentStats.averageAccelTrigger = 
+                (state.currentStats.averageAccelTrigger * (state.currentStats.accelTriggersCount - 1) + state.aveGyro) 
+                / state.currentStats.accelTriggersCount;
             
             saveStats();
         }
         
         // Check manual or remote triggers
-        if ((LOCAL_TRIGGER_STATE_1 == LOW || LOCAL_TRIGGER_STATE_2 == LOW || REMOTE_TRIGGER_STATE == 0) 
-            && RESET_TIMER >= RESET_LIMIT && !FIRE_ON) {
-            FIRE_TIME_LIMIT = REMOTE_FIRE_TIME;
+        if ((state.localTriggerState1 == LOW || state.localTriggerState2 == LOW || state.remoteTriggerState == 0) 
+            && state.resetTimer >= state.resetLimit && !state.fireOn) {
+            state.fireTimeLimit = state.remoteFireTime;
             startFire();
         }
         
         // Fire control logic
-        if (FIRE_ON) {
-            // Handle alternating fire pattern
-            if (FIRE_CYCLE_COUNTER <= FIRE_CYCLE) {
-                digitalWrite(FIRE_PIN_1, HIGH);
-                digitalWrite(FIRE_PIN_2, LOW);
+        if (state.fireOn) {
+            // Only do fire cycling if fireCycle > 0
+            if (state.fireCycle > 0) {
+                // Use separate high-precision timer for fire cycling
+                if (currentMicros - lastFireCycleUpdate >= (state.fireCycle * 1000000)) {
+                    lastFireCycleUpdate = currentMicros;
+                    state.fireCycleToggle = !state.fireCycleToggle; // Toggle between true/false
+                }
+                
+                if (state.fireCycleToggle) {
+                    digitalWrite(state.FIRE_PIN_1, HIGH);
+                    digitalWrite(state.FIRE_PIN_2, LOW);
+                } else {
+                    digitalWrite(state.FIRE_PIN_1, LOW);
+                    digitalWrite(state.FIRE_PIN_2, HIGH);
+                }
             } else {
-                digitalWrite(FIRE_PIN_1, LOW);
-                digitalWrite(FIRE_PIN_2, HIGH);
+                // When fireCycle is 0, fire both pins simultaneously
+                digitalWrite(state.FIRE_PIN_1, HIGH);
+                digitalWrite(state.FIRE_PIN_2, HIGH);
             }
             
-            FIRE_CYCLE_COUNTER += LOOP_RATE;
-            if (FIRE_CYCLE_COUNTER >= FIRE_CYCLE * 2) {
-                FIRE_CYCLE_COUNTER = 0;
-            }
+            // Use millis() for overall fire duration timing
+            float currentFireDuration = (millis() - state.fireStartTime) / 1000.0;
             
-            if (FIRE_TIMER >= FIRE_TIME_LIMIT) {
+            // Add debug output
+            logFireStatus(currentFireDuration);
+            
+            if (currentFireDuration >= state.fireTimeLimit) {
                 stopFire();
-                FIRE_TIMER = 0;
-                FIRE_CYCLE_COUNTER = 0;
-                RESET_STATE = 0;
-                RESET_TIMER = 0;
-                digitalWrite(FIRE_PIN_1, LOW);
-                digitalWrite(FIRE_PIN_2, LOW);
+                state.fireTimer = 0;
+                state.fireCycleToggle = false;
+                state.resetState = 0;
+                state.resetTimer = 0;
+                digitalWrite(state.FIRE_PIN_1, LOW);
+                digitalWrite(state.FIRE_PIN_2, LOW);
             }
         } else {
-            digitalWrite(FIRE_PIN_1, LOW);
-            digitalWrite(FIRE_PIN_2, LOW);
+            digitalWrite(state.FIRE_PIN_1, LOW);
+            digitalWrite(state.FIRE_PIN_2, LOW);
+            lastFireCycleUpdate = currentMicros; // Reset the cycle timer when not firing
         }
         
         // Update timers
-        if (FIRE_ON) {
-            FIRE_TIMER += LOOP_RATE;
-        } else if (!RESET_STATE && RESET_TIMER < RESET_LIMIT) {  // Only increment reset timer when not firing and below limit
-            RESET_TIMER += LOOP_RATE;
+        if (state.fireOn) {
+            float currentFireDuration = (millis() - state.fireStartTime) / 1000.0;
+            state.fireTimer = currentFireDuration;  // Sync fireTimer with actual duration
+        } else if (!state.resetState && state.resetTimer < state.resetLimit) {
+            state.resetTimer += state.loopRate;
+            // Add logging for reset period
+            logFireStatus(0, "Reset");  // Duration is 0 during reset period
         }
         
         // Update memory usage statistics
-        uint32_t freeHeap = ESP.getFreeHeap();            // Similar to esp_get_free_heap_size()
-        uint32_t maxFreeBlock = ESP.getMaxFreeBlockSize(); // Largest contiguous block
-        uint32_t heapFragmentation = ESP.getHeapFragmentation(); // Fragmentation percentage
+        uint32_t freeHeap = ESP.getFreeHeap();
+        uint32_t maxFreeBlock = ESP.getMaxFreeBlockSize();
+        uint32_t heapFragmentation = ESP.getHeapFragmentation();
         
         // Calculate memory usage considering both total free and largest block
         float currentMemUsage = 100.0 * (1.0 - ((float)maxFreeBlock / (float)freeHeap));
-        
-        // Debug print
-        Serial.printf("Free heap: %u bytes, Max block: %u bytes, Fragmentation: %u%%, Usage: %.2f%%\n", 
-                     freeHeap, maxFreeBlock, heapFragmentation, currentMemUsage);
-        
-        // Ensure the value is within reasonable bounds (0-100%)
         currentMemUsage = constrain(currentMemUsage, 0.0, 100.0);
         
-        if (currentMemUsage > currentStats.peakMemoryUsage && !isnan(currentMemUsage)) {
-            currentStats.peakMemoryUsage = currentMemUsage;
+        if (currentMemUsage > state.currentStats.peakMemoryUsage && !isnan(currentMemUsage)) {
+            state.currentStats.peakMemoryUsage = currentMemUsage;
+            Serial.printf("New peak memory usage: %.2f%% (Free: %u bytes, Fragmentation: %u%%)\n", 
+                         currentMemUsage, freeHeap, heapFragmentation);
             saveStats();
         }
     }
@@ -1182,7 +1258,24 @@ void loop() {
     // Small delay to prevent WiFi issues
     delay(1);
 }
-
 // Add near other constants
-static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROM_DATA_ADDR <= EEPROM_SIZE, 
+static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROMConfig::EEPROM_DATA_ADDR <= EEPROMConfig::EEPROM_SIZE, 
     "Combined settings and stats too large for EEPROM");
+    
+void logFireStatus(float currentFireDuration, const char* eventType) {
+    Serial.printf("%-8s Duration: %6.2f/%6.2f (%3d%%), FireTimer: %6.2f/%6.2f (%3d%%), ResetTimer: %6.2f/%6.2f (%3d%%), Pin1=%-4s, Pin2=%-4s\n",
+        eventType,
+        currentFireDuration,
+        state.fireTimeLimit,
+        (int)((currentFireDuration / state.fireTimeLimit) * 100),  // Fire duration progress
+        state.fireTimer,
+        state.fireTimeLimit,
+        (int)((state.fireTimer / state.fireTimeLimit) * 100),      // Fire timer progress
+        state.resetTimer,
+        state.resetLimit,
+        (int)((state.resetTimer / state.resetLimit) * 100),        // Reset progress
+        digitalRead(state.FIRE_PIN_1) ? "HIGH" : "LOW",
+        digitalRead(state.FIRE_PIN_2) ? "HIGH" : "LOW"
+    );
+}
+    
