@@ -417,17 +417,37 @@ String prepare_Data_Page() {
     htmlPage += ".bool-false { color: #ff4444; font-weight: bold; }"; // Red
     htmlPage += ".state-firing { color: #ff4444; font-weight: bold; }";  // Red for firing
     htmlPage += ".state-idle { color: #4CAF50; font-weight: bold; }";    // Green for idle
+    htmlPage += ".status-indicator {";  // Add the same indicator style
+    htmlPage += "  display: inline-block;";
+    htmlPage += "  width: 20px;";
+    htmlPage += "  height: 20px;";
+    htmlPage += "  border-radius: 50%;";
+    htmlPage += "  margin: 0 10px;";
+    htmlPage += "}";
     htmlPage += "</style>";
     
-    // Keep existing JavaScript but move it here
     htmlPage += "<script>";
     htmlPage += "function updateData() {";
     htmlPage += "  fetch('/data/status')";
     htmlPage += "  .then(response => response.json())";
     htmlPage += "  .then(data => {";
+    htmlPage += "    if (data.firePin1) {";
+    htmlPage += "      document.getElementById('pin1').className = 'state-firing';";
+    htmlPage += "      document.getElementById('pin1').textContent = 'FIRE';";
+    htmlPage += "    } else {";
+    htmlPage += "      document.getElementById('pin1').className = 'state-idle';";
+    htmlPage += "      document.getElementById('pin1').textContent = 'IDLE';";
+    htmlPage += "    }";
+    htmlPage += "    if (data.firePin2) {";
+    htmlPage += "      document.getElementById('pin2').className = 'state-firing';";
+    htmlPage += "      document.getElementById('pin2').textContent = 'FIRE';";
+    htmlPage += "    } else {";
+    htmlPage += "      document.getElementById('pin2').className = 'state-idle';";
+    htmlPage += "      document.getElementById('pin2').textContent = 'IDLE';";
+    htmlPage += "    }";
     htmlPage += "    Object.keys(data).forEach(key => {";
-    htmlPage += "      const elem = document.getElementById(key);";
-    htmlPage += "      if (elem) {";
+    htmlPage += "      let elem = document.getElementById(key);";
+    htmlPage += "      if (elem && key !== 'firePin1' && key !== 'firePin2') {";  // Skip fire pins as they're handled above
     htmlPage += "        if (key === 'resetState') {";
     htmlPage += "          elem.className = data[key] ? 'bool-true' : 'bool-false';";
     htmlPage += "          elem.textContent = data[key] ? 'READY' : 'WAITING';";
@@ -437,9 +457,6 @@ String prepare_Data_Page() {
     htmlPage += "        } else if (key === 'remoteTriggerState' || key === 'localTriggerState1' || key === 'localTriggerState2') {";
     htmlPage += "          elem.className = !data[key] ? 'state-firing' : 'state-idle';";
     htmlPage += "          elem.textContent = !data[key] ? 'ACTIVE' : 'INACTIVE';";
-    htmlPage += "        } else if (key === 'firePin1' || key === 'firePin2') {";
-    htmlPage += "          elem.className = data[key] ? 'state-firing' : 'state-idle';";
-    htmlPage += "          elem.textContent = data[key] ? 'FIRE' : 'IDLE';";
     htmlPage += "        } else {";
     htmlPage += "          elem.textContent = typeof data[key] === 'number' ? data[key].toFixed(2) : data[key];";
     htmlPage += "        }";
@@ -450,7 +467,7 @@ String prepare_Data_Page() {
     htmlPage += "}";
     htmlPage += "document.addEventListener('DOMContentLoaded', function() {";
     htmlPage += "  updateData();";
-    htmlPage += "  setInterval(updateData, 100);";
+    htmlPage += "  setInterval(updateData, 50);";  // Change to 50ms to match fire control page
     htmlPage += "});";
     htmlPage += "</script>";
     htmlPage += "</HEAD><BODY>";
@@ -458,11 +475,11 @@ String prepare_Data_Page() {
     // Title
     htmlPage += "<h2>&#128293Live Data&#128293</h2>";
 
-    // Fire Pin Status Section (moved to top)
+    // Fire Pin Status Section
     htmlPage += "<div class='data-box'>";
     htmlPage += "<div class='data-title'>Fire Pin Status</div>";
-    htmlPage += "<div class='data-row'>Fire Pin 1<br><span id='firePin1' class='state-idle'>IDLE</span></div>";
-    htmlPage += "<div class='data-row'>Fire Pin 2<br><span id='firePin2' class='state-idle'>IDLE</span></div>";
+    htmlPage += "<div class='data-row'>Fire Pin 1<br><span id='pin1' class='status-indicator'></span></div>";
+    htmlPage += "<div class='data-row'>Fire Pin 2<br><span id='pin2' class='status-indicator'></span></div>";
     htmlPage += "</div>";
 
     // Timer Status Section
