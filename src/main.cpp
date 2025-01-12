@@ -353,6 +353,9 @@ String prepare_Data_Page() {
     htmlPage += "        } else if (key === 'remoteTriggerState' || key === 'localTriggerState1' || key === 'localTriggerState2') {";
     htmlPage += "          elem.className = !data[key] ? 'state-firing' : 'state-idle';";  // Using same classes as fire state
     htmlPage += "          elem.textContent = !data[key] ? 'ACTIVE' : 'INACTIVE';";
+    htmlPage += "        } else if (key === 'firePin1' || key === 'firePin2') {";
+    htmlPage += "          elem.className = data[key] ? 'state-firing' : 'state-idle';";
+    htmlPage += "          elem.textContent = data[key] ? 'FIRE' : 'IDLE';";
     htmlPage += "        } else {";
     htmlPage += "          elem.textContent = typeof data[key] === 'number' ? data[key].toFixed(2) : data[key];";
     htmlPage += "        }";
@@ -370,6 +373,13 @@ String prepare_Data_Page() {
 
     // Title
     htmlPage += "<h2>&#128293Live Data&#128293</h2>";
+
+    // Fire Pin Status Section (moved to top)
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Fire Pin Status</div>";
+    htmlPage += "<div class='data-row'>Fire Pin 1<br><span id='firePin1' class='state-idle'>IDLE</span></div>";
+    htmlPage += "<div class='data-row'>Fire Pin 2<br><span id='firePin2' class='state-idle'>IDLE</span></div>";
+    htmlPage += "</div>";
 
     // Timer Status Section
     htmlPage += "<div class='data-box'>";
@@ -814,7 +824,9 @@ void handle_Data_Status() {
     json += "\"fireOn\":" + String(state.fireOn) + ",";
     json += "\"accel1\":" + String(state.accel1[7], 3) + ",";
     json += "\"accel2\":" + String(state.accel2[7], 3) + ",";
-    json += "\"aveGyro\":" + String(state.aveGyro, 2);
+    json += "\"aveGyro\":" + String(state.aveGyro, 2) + ",";
+    json += "\"firePin1\":" + String(digitalRead(state.FIRE_PIN_1)) + ",";
+    json += "\"firePin2\":" + String(digitalRead(state.FIRE_PIN_2));
     json += "}";
     state.server.send(200, "application/json", json);
 }
