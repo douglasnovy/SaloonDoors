@@ -351,7 +351,7 @@ String prepare_Data_Page() {
     htmlPage += "          elem.className = data[key] ? 'state-firing' : 'state-idle';";
     htmlPage += "          elem.textContent = data[key] ? 'FIRING' : 'IDLE';";
     htmlPage += "        } else if (key === 'remoteTriggerState' || key === 'localTriggerState1' || key === 'localTriggerState2') {";
-    htmlPage += "          elem.className = !data[key] ? 'state-firing' : 'state-idle';";  // Using same classes as fire state
+    htmlPage += "          elem.className = !data[key] ? 'state-firing' : 'state-idle';";
     htmlPage += "          elem.textContent = !data[key] ? 'ACTIVE' : 'INACTIVE';";
     htmlPage += "        } else if (key === 'firePin1' || key === 'firePin2') {";
     htmlPage += "          elem.className = data[key] ? 'state-firing' : 'state-idle';";
@@ -431,113 +431,146 @@ String prepare_Fire_Control_Page() {
     String htmlPage;
     htmlPage.reserve(4096);
     
-    htmlPage += "<!DOCTYPE HTML>";
-    htmlPage += "<HTML>";
-    htmlPage += "<HEAD>";
-    htmlPage += "<TITLE>Saloon Doors Controls</TITLE>";
-    htmlPage += "<meta charset='UTF-8'>";
+    htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
+    htmlPage += "<TITLE>Fire Control Panel</TITLE>";
+    htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
     htmlPage += "<style>";
-    htmlPage += "  .button {";
-    htmlPage += "    border: none;";
-    htmlPage += "    color: white;";
-    htmlPage += "    padding: 15px 32px;";
-    htmlPage += "    text-align: center;";
-    htmlPage += "    text-decoration: none;";
-    htmlPage += "    display: inline-block;";
-    htmlPage += "    font-size: 150px;";
-    htmlPage += "    margin: 4px 2px;";
-    htmlPage += "    cursor: pointer;";
-    htmlPage += "    transition: background-color 0.3s;";
-    htmlPage += "  }";
-    htmlPage += "  .status-left {";
-    htmlPage += "    position: fixed;";
-    htmlPage += "    top: 10px;";
-    htmlPage += "    left: 10px;";
-    htmlPage += "    font-size: 144px;";
-    htmlPage += "  }";
-    htmlPage += "  .status-right {";
-    htmlPage += "    position: fixed;";
-    htmlPage += "    top: 10px;";
-    htmlPage += "    right: 10px;";
-    htmlPage += "    font-size: 144px;";
-    htmlPage += "  }";
-    htmlPage += "  .main-content {";
-    htmlPage += "    margin-top: 200px;";
-    htmlPage += "  }";
+    // Base styling
+    htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; text-align: center; }";
+    htmlPage += ".data-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
+    htmlPage += ".data-title { color:#4CAF50; margin-bottom:10px; font-size:120%; }";
+    htmlPage += ".data-row { margin:8px 0; }";
+    htmlPage += ".value { color:#FFA500; }";
+    htmlPage += "a { color:#4CAF50; text-decoration:none; }";
+    htmlPage += "a:hover { color:#45a049; }";
+    
+    // Fire button styling
+    htmlPage += ".fire-button {";
+    htmlPage += "  width: 80vw;";
+    htmlPage += "  height: 80vw;";
+    htmlPage += "  max-width: 400px;";
+    htmlPage += "  max-height: 400px;";
+    htmlPage += "  border-radius: 50%;";
+    htmlPage += "  border: none;";
+    htmlPage += "  font-size: 48px;";
+    htmlPage += "  font-weight: bold;";
+    htmlPage += "  margin: 20px auto;";
+    htmlPage += "  cursor: pointer;";
+    htmlPage += "  transition: all 0.3s ease;";
+    htmlPage += "  box-shadow: 0 0 20px rgba(255,0,0,0.5);";
+    htmlPage += "}";
+    
+    // Status indicators
+    htmlPage += ".status-indicator {";
+    htmlPage += "  display: inline-block;";
+    htmlPage += "  width: 20px;";
+    htmlPage += "  height: 20px;";
+    htmlPage += "  border-radius: 50%;";
+    htmlPage += "  margin: 0 10px;";
+    htmlPage += "}";
+    
+    // Progress bar
+    htmlPage += ".progress-container {";
+    htmlPage += "  width: 100%;";
+    htmlPage += "  background-color: #444;";
+    htmlPage += "  border-radius: 10px;";
+    htmlPage += "  margin: 10px 0;";
+    htmlPage += "}";
+    htmlPage += ".progress-bar {";
+    htmlPage += "  width: 0%;";
+    htmlPage += "  height: 20px;";
+    htmlPage += "  background-color: #4CAF50;";
+    htmlPage += "  border-radius: 10px;";
+    htmlPage += "  transition: width 0.3s ease;";
+    htmlPage += "}";
     htmlPage += "</style>";
+
+    // JavaScript for dynamic updates
     htmlPage += "<script>";
-    // Update status function
     htmlPage += "function updateStatus() {";
     htmlPage += "  fetch('/fire/status')";
-    htmlPage += "    .then(response => response.json())";
-    htmlPage += "    .then(data => {";
-    htmlPage += "      document.getElementById('resetTimer').textContent = data.resetTimer.toFixed(2);";
-    htmlPage += "      document.getElementById('fireTimer').textContent = data.fireTimer.toFixed(2);";
-    htmlPage += "      document.getElementById('fireTimeLimit').textContent = data.fireTimeLimit.toFixed(2);";
-    htmlPage += "      const btn = document.getElementById('fireButton');";
-    htmlPage += "      if (data.fireOn) {";
-    htmlPage += "        btn.style.backgroundColor = 'red';";
-    htmlPage += "        btn.disabled = true;";
-    htmlPage += "      } else if (data.resetTimer < data.resetLimit) {";
-    htmlPage += "        btn.style.backgroundColor = 'grey';";
-    htmlPage += "        btn.disabled = true;";
-    htmlPage += "      } else {";
-    htmlPage += "        btn.style.backgroundColor = 'green';";
-    htmlPage += "        btn.disabled = false;";
-    htmlPage += "      }";
-    htmlPage += "      document.getElementById('pin1Status').innerHTML = !data.firePin1 ? '🟢' : '🔴';";
-    htmlPage += "      document.getElementById('pin2Status').innerHTML = !data.firePin2 ? '🟢' : '🔴';";
-    htmlPage += "    })";
-    htmlPage += "    .catch(error => console.error('Error:', error));";
+    htmlPage += "  .then(response => response.json())";
+    htmlPage += "  .then(data => {";
+    htmlPage += "    const btn = document.getElementById('fireButton');";
+    htmlPage += "    const resetProgress = (data.resetTimer / data.resetLimit) * 100;";
+    htmlPage += "    const fireProgress = (data.fireTimer / data.fireTimeLimit) * 100;";
+    
+    // Update button state
+    htmlPage += "    if (data.fireOn) {";
+    htmlPage += "      btn.style.backgroundColor = '#ff4444';";
+    htmlPage += "      btn.innerHTML = 'FIRING';";
+    htmlPage += "      btn.disabled = true;";
+    htmlPage += "    } else if (data.resetTimer < data.resetLimit) {";
+    htmlPage += "      btn.style.backgroundColor = '#666';";
+    htmlPage += "      btn.innerHTML = 'RESETTING';";
+    htmlPage += "      btn.disabled = true;";
+    htmlPage += "    } else {";
+    htmlPage += "      btn.style.backgroundColor = '#4CAF50';";
+    htmlPage += "      btn.innerHTML = 'FIRE!';";
+    htmlPage += "      btn.disabled = false;";
+    htmlPage += "    }";
+    
+    // Update timers and progress bars
+    htmlPage += "    document.getElementById('resetTimer').textContent = data.resetTimer.toFixed(2);";
+    htmlPage += "    document.getElementById('resetLimit').textContent = data.resetLimit.toFixed(2);";
+    htmlPage += "    document.getElementById('fireTimer').textContent = data.fireTimer.toFixed(2);";
+    htmlPage += "    document.getElementById('fireTimeLimit').textContent = data.fireTimeLimit.toFixed(2);";
+    htmlPage += "    document.getElementById('resetProgress').style.width = resetProgress + '%';";
+    htmlPage += "    document.getElementById('fireProgress').style.width = fireProgress + '%';";
+    
+    // Update pin status indicators
+    htmlPage += "    document.getElementById('pin1').style.backgroundColor = data.firePin1 ? '#ff4444' : '#4CAF50';";
+    htmlPage += "    document.getElementById('pin2').style.backgroundColor = data.firePin2 ? '#ff4444' : '#4CAF50';";
+    htmlPage += "  });";
     htmlPage += "}";
+    
     // Fire trigger function
     htmlPage += "function fireTrigger() {";
     htmlPage += "  const btn = document.getElementById('fireButton');";
-    htmlPage += "  btn.disabled = true;";  // Disable immediately
-    htmlPage += "  btn.style.backgroundColor = 'grey';";  // Visual feedback
+    htmlPage += "  btn.disabled = true;";
     htmlPage += "  fetch('/fire/on')";
     htmlPage += "    .then(response => {";
-    htmlPage += "      if (response.ok) {";
-    htmlPage += "        updateStatus();";
-    htmlPage += "      } else {";
-    htmlPage += "        btn.disabled = false;";
-    htmlPage += "        btn.style.backgroundColor = 'green';";
-    htmlPage += "      }";
-    htmlPage += "    })";
-    htmlPage += "    .catch(error => {";
-    htmlPage += "      console.error('Error:', error);";
-    htmlPage += "      btn.disabled = false;";
-    htmlPage += "      btn.style.backgroundColor = 'green';";
+    htmlPage += "      if (!response.ok) btn.disabled = false;";
     htmlPage += "    });";
     htmlPage += "  return false;";
     htmlPage += "}";
-    // Start periodic updates
+    
+    // Initialize updates
     htmlPage += "document.addEventListener('DOMContentLoaded', function() {";
-    htmlPage += "  updateStatus();";  // Initial update
-    htmlPage += "  setInterval(updateStatus, 100);";  // Update every 100ms
+    htmlPage += "  updateStatus();";
+    htmlPage += "  setInterval(updateStatus, 50);";  // Changed from 100 to 50ms for faster updates
     htmlPage += "});";
     htmlPage += "</script>";
-    htmlPage += "</HEAD>";
-    htmlPage += "<BODY style='font-size:300%;background-color:black;color:white'>";
-    htmlPage += "<div class='status-left' id='pin1Status'>🟢</div>";
-    htmlPage += "<div class='status-right' id='pin2Status'>🟢</div>";
-    htmlPage += "<div class='main-content'>";
-    htmlPage += "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(state.resetTimer, 2) + "</span> / " + String(state.resetLimit, 2) + "</h3>";
-    htmlPage += "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(state.fireTimer, 2) + "</span> / <span id='fireTimeLimit'>" + String(state.fireTimeLimit, 2) + "</span></h3>";
-    htmlPage += "<br>";
-    // Initial button state based on current conditions
-    String initialColor = state.fireOn ? "red" : (state.resetTimer < state.resetLimit ? "grey" : "green");
-    String initialDisabled = (state.fireOn || state.resetTimer < state.resetLimit) ? "disabled" : "";
-    htmlPage += "<button id='fireButton' class='button' onclick='return fireTrigger();' style='background-color: " + initialColor + "' " + initialDisabled + ">FIRE!</button>";
-    htmlPage += "<br>";
-    htmlPage += "<p><a href='/'>Root Page</a></p>";
-    htmlPage += "<p><a href='/settings'>Settings Control Page</a></p>";
-    htmlPage += "<p><a href='/fire'>Fire Control Page</a></p>";
-    htmlPage += "<p><a href='/data'>Data Page</a></p>";
+    htmlPage += "</HEAD><BODY>";
+
+    // Main fire control button
+    htmlPage += "<button id='fireButton' class='fire-button' onclick='return fireTrigger();'>🎯 FIRE! 🎯</button>";
+
+    // Status boxes
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>System Status</div>";
+    htmlPage += "<div class='data-row'>Fire Pin 1 <span id='pin1' class='status-indicator'></span></div>";
+    htmlPage += "<div class='data-row'>Fire Pin 2 <span id='pin2' class='status-indicator'></span></div>";
     htmlPage += "</div>";
-    htmlPage += "</BODY>";
-    htmlPage += "</HTML>";
-    
+
+    // Timer box with progress bars
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Timers</div>";
+    htmlPage += "<div class='data-row'>Fire Progress: <span class='value'><span id='fireTimer'>0.00</span>/<span id='fireTimeLimit'>0.00</span></span></div>";
+    htmlPage += "<div class='progress-container'><div id='fireProgress' class='progress-bar'></div></div>";
+    htmlPage += "<div class='data-row'>Reset Progress: <span class='value'><span id='resetTimer'>0.00</span>/<span id='resetLimit'>0.00</span></span></div>";
+    htmlPage += "<div class='progress-container'><div id='resetProgress' class='progress-bar'></div></div>";
+    htmlPage += "</div>";
+
+    // Navigation links
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-row'><a href='/'>Root Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/settings'>Settings Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/data'>Data Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/stats'>Statistics Page</a></div>";
+    htmlPage += "</div>";
+
+    htmlPage += "</BODY></HTML>";
     return htmlPage;
 }
 
