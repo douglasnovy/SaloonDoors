@@ -607,10 +607,29 @@ String prepare_Stats_Page() {
     htmlPage += "<TITLE>System Statistics</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
     htmlPage += "<style>";
-    htmlPage += "body { font-size:200%; background-color:black; color:white; }";
-    htmlPage += ".stat-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
-    htmlPage += ".reset-btn { background-color:#ff4444; color:white; padding:15px; border:none; border-radius:5px; font-size:100%; cursor:pointer; }";
+    // Match the data page styling
+    htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; }";
+    htmlPage += ".data-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
+    htmlPage += ".data-title { color:#4CAF50; margin-bottom:10px; font-size:120%; }";
+    htmlPage += ".data-row { margin:8px 0; }";
+    htmlPage += ".value { color:#FFA500; }";  // Orange color for values
+    htmlPage += "a { color:#4CAF50; text-decoration:none; }";
+    htmlPage += "a:hover { color:#45a049; }";
+    htmlPage += ".reset-btn {";
+    htmlPage += "  background-color:#ff4444;";
+    htmlPage += "  color:white;";
+    htmlPage += "  padding:15px 32px;";
+    htmlPage += "  border:none;";
+    htmlPage += "  border-radius:5px;";
+    htmlPage += "  font-size:100%;";
+    htmlPage += "  cursor:pointer;";
+    htmlPage += "  margin:20px 0;";
+    htmlPage += "  transition: background-color 0.3s;";
+    htmlPage += "}";
+    htmlPage += ".reset-btn:hover { background-color:#ff0000; }";
     htmlPage += "</style>";
+    
+    // Add JavaScript for confirmation dialog
     htmlPage += "<script>";
     htmlPage += "function resetStats() {";
     htmlPage += "  if(confirm('Reset all statistics to zero?')) {";
@@ -626,34 +645,58 @@ String prepare_Stats_Page() {
     htmlPage += "</script>";
     htmlPage += "</HEAD><BODY>";
     
-    htmlPage += "<h2>System Statistics</h2>";
-    htmlPage += "<div class='stat-box'>";
-    htmlPage += "<h3>Trigger Statistics</h3>";
-    htmlPage += "<p>Remote Triggers: " + String(state.currentStats.remoteTriggersCount) + "</p>";
-    htmlPage += "<p>Accelerometer Triggers: " + String(state.currentStats.accelTriggersCount) + "</p>";
+    htmlPage += "<h2>&#128293 Statistics &#128293</h2>";
     
-    htmlPage += "<h3>Motion Data</h3>";
-    htmlPage += "<p>Highest Angular Acceleration: " + String(state.currentStats.highestGyroReading, 1) + " °/s</p>";
-    htmlPage += "<p>Highest Linear Acceleration: " + String(state.currentStats.highestAccelReading, 2) + " g</p>";
-    htmlPage += "<p>Average Angular Trigger: " + String(state.currentStats.averageAccelTrigger, 1) + " °/s</p>";
+    // Trigger Statistics Box
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Trigger Statistics</div>";
+    htmlPage += "<div class='data-row'>Remote Triggers<br><span class='value'>" + String(state.currentStats.remoteTriggersCount) + "</span></div>";
+    htmlPage += "<div class='data-row'>Accelerometer Triggers<br><span class='value'>" + String(state.currentStats.accelTriggersCount) + "</span></div>";
+    htmlPage += "</div>";
     
-    htmlPage += "<h3>Fire Duration</h3>";
+    // Motion Data Box
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Motion Data</div>";
+    htmlPage += "<div class='data-row'>Highest Angular Acceleration<br><span class='value'>" + String(state.currentStats.highestGyroReading, 1) + " deg/s</span></div>";
+    htmlPage += "<div class='data-row'>Highest Linear Acceleration<br><span class='value'>" + String(state.currentStats.highestAccelReading, 2) + " g</span></div>";
+    htmlPage += "<div class='data-row'>Average Angular Trigger<br><span class='value'>" + String(state.currentStats.averageAccelTrigger, 1) + " deg/s</span></div>";
+    htmlPage += "</div>";
+    
+    // Fire Duration Box
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Fire Duration</div>";
+    
     // Convert total fire time to hours:minutes:seconds
     unsigned long totalSeconds = (unsigned long)state.currentStats.totalFireTime;
     unsigned long hours = totalSeconds / 3600;
     unsigned long minutes = (totalSeconds % 3600) / 60;
     unsigned long seconds = totalSeconds % 60;
     
-    htmlPage += "<p>Total Fire Time: " + String(hours) + "h " + String(minutes) + "m " + String(seconds) + "s</p>";
-    htmlPage += "<p>Longest Single Fire: " + String(state.currentStats.longestFireDuration, 1) + " seconds</p>";
-    
-    htmlPage += "<h3>System Resources</h3>";
-    htmlPage += "<p>Peak Memory Usage: " + String(state.currentStats.peakMemoryUsage, 1) + "%</p>";
+    htmlPage += "<div class='data-row'>Total Fire Time<br><span class='value'>" + 
+                String(hours) + "h " + String(minutes) + "m " + String(seconds) + "s</span></div>";
+    htmlPage += "<div class='data-row'>Longest Single Fire<br><span class='value'>" + 
+                String(state.currentStats.longestFireDuration, 1) + " seconds</span></div>";
     htmlPage += "</div>";
     
+    // System Resources Box
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>System Resources</div>";
+    htmlPage += "<div class='data-row'>Peak Memory Usage<br><span class='value'>" + 
+                String(state.currentStats.peakMemoryUsage, 1) + "%</span></div>";
+    htmlPage += "</div>";
+    
+    // Reset Button and Navigation
     htmlPage += "<button class='reset-btn' onclick='resetStats()'>Reset Statistics</button>";
-    htmlPage += "<br><br>";
-    htmlPage += "<p><a href='/'>Root Page</a></p>";
+    
+    // Navigation Links Box
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-row'><a href='/'>Root Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/settings'>Settings Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/fire'>Fire Control Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/data'>Data Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/stats'>Refresh Statistics</a></div>";
+    htmlPage += "</div>";
+    
     htmlPage += "</BODY></HTML>";
     
     return htmlPage;
