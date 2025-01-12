@@ -52,9 +52,10 @@ struct SystemStats {
     float longestFireDuration;             // Longest single fire event duration in seconds
     float averageAccelTrigger;             // Running average of trigger acceleration values
     float peakMemoryUsage;                 // Peak heap memory usage as percentage (0-100%)
+    float highestGyroReading;              // Highest angular velocity recorded
 };
 
-// Define default stats
+// Define default stats - match the order in the SystemStats struct
 const SystemStats DEFAULT_STATS = {
     .remoteTriggersCount = 0,
     .accelTriggersCount = 0,
@@ -62,7 +63,8 @@ const SystemStats DEFAULT_STATS = {
     .totalFireTime = 0.0,
     .longestFireDuration = 0.0,
     .averageAccelTrigger = 0.0,
-    .peakMemoryUsage = 0.0
+    .peakMemoryUsage = 0.0,
+    .highestGyroReading = 0.0
 };
 
 struct SystemState {
@@ -90,8 +92,8 @@ struct SystemState {
     // Accelerometer Settings
     static const int MPU_1 = 0x68;
     static const int MPU_2 = 0x69;
-    int16_t accel1[9] = {0};
-    int16_t accel2[9] = {0};
+    float accel1[9] = {0};
+    float accel2[9] = {0};
     float aveGyro = 0;
     float minGyro = 0;
     float maxGyro = 0;
@@ -124,6 +126,7 @@ bool loadStats();
 void startFire();
 void stopFire();
 void logFireStatus(float currentFireDuration, const char* eventType = "Status");
+void updateMotionStats();
 
 // Modify the function that starts the fire (where FIRE_ON is set to true)
 void startFire() {
@@ -188,6 +191,8 @@ bool saveStats() {
         Serial.printf("Average Accel Trigger: %.2f -> %.2f g\n", oldStats.averageAccelTrigger, state.currentStats.averageAccelTrigger);
     if (oldStats.peakMemoryUsage != state.currentStats.peakMemoryUsage)
         Serial.printf("Peak Memory Usage: %.2f -> %.2f%%\n", oldStats.peakMemoryUsage, state.currentStats.peakMemoryUsage);
+    if (oldStats.highestGyroReading != state.currentStats.highestGyroReading)
+        Serial.printf("Highest Gyro Reading: %.2f -> %.2f deg/s\n", oldStats.highestGyroReading, state.currentStats.highestGyroReading);
 
     // Save the new stats
     EEPROM.put(EEPROMConfig::EEPROM_DATA_ADDR + sizeof(FireSettings), state.currentStats);
@@ -582,9 +587,10 @@ String prepare_Stats_Page() {
     htmlPage += "<p>Remote Triggers: " + String(state.currentStats.remoteTriggersCount) + "</p>";
     htmlPage += "<p>Accelerometer Triggers: " + String(state.currentStats.accelTriggersCount) + "</p>";
     
-    htmlPage += "<h3>Acceleration Data</h3>";
-    htmlPage += "<p>Highest Acceleration: " + String(state.currentStats.highestAccelReading, 2) + " g</p>";
-    htmlPage += "<p>Average Trigger Acceleration: " + String(state.currentStats.averageAccelTrigger, 2) + " g</p>";
+    htmlPage += "<h3>Motion Data</h3>";
+    htmlPage += "<p>Highest Angular Acceleration: " + String(state.currentStats.highestGyroReading, 1) + " °/s</p>";
+    htmlPage += "<p>Highest Linear Acceleration: " + String(state.currentStats.highestAccelReading, 2) + " g</p>";
+    htmlPage += "<p>Average Angular Trigger: " + String(state.currentStats.averageAccelTrigger, 1) + " °/s</p>";
     
     htmlPage += "<h3>Fire Duration</h3>";
     // Convert total fire time to hours:minutes:seconds
@@ -701,28 +707,28 @@ void handleResetDefaults() {
 }
 
 void handle_Data_Status() {
-  state.server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  state.server.sendHeader("Pragma", "no-cache");
-  state.server.sendHeader("Expires", "-1");
-  // Pre-allocate string space
-  String json;
-  json.reserve(512); // Adjust size as needed
-  
-  json += "{";
-  json += "\"resetTimer\":" + String(state.resetTimer, 2) + ",";
-  json += "\"resetLimit\":" + String(state.resetLimit, 2) + ",";
-  json += "\"resetState\":" + String(state.resetState) + ",";
-  json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
-  json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
-  json += "\"remoteTriggerState\":" + String(state.remoteTriggerState) + ",";
-  json += "\"localTriggerState1\":" + String(digitalRead(state.MANUAL_TRIGGER_1)) + ",";
-  json += "\"localTriggerState2\":" + String(digitalRead(state.MANUAL_TRIGGER_2)) + ",";
-  json += "\"fireOn\":" + String(state.fireOn) + ",";
-  json += "\"accel1\":" + String(state.accel1[8], 2) + ",";
-  json += "\"accel2\":" + String(state.accel2[8], 2) + ",";
-  json += "\"aveGyro\":" + String(state.aveGyro, 2);
-  json += "}";
-  state.server.send(200, "application/json", json);
+    state.server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    state.server.sendHeader("Pragma", "no-cache");
+    state.server.sendHeader("Expires", "-1");
+    
+    String json;
+    json.reserve(512);
+    
+    json += "{";
+    json += "\"resetTimer\":" + String(state.resetTimer, 2) + ",";
+    json += "\"resetLimit\":" + String(state.resetLimit, 2) + ",";
+    json += "\"resetState\":" + String(state.resetState) + ",";
+    json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
+    json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
+    json += "\"remoteTriggerState\":" + String(state.remoteTriggerState) + ",";
+    json += "\"localTriggerState1\":" + String(digitalRead(state.MANUAL_TRIGGER_1)) + ",";
+    json += "\"localTriggerState2\":" + String(digitalRead(state.MANUAL_TRIGGER_2)) + ",";
+    json += "\"fireOn\":" + String(state.fireOn) + ",";
+    json += "\"accel1\":" + String(state.accel1[7], 3) + ",";  // Using 3 decimal places for more precision
+    json += "\"accel2\":" + String(state.accel2[7], 3) + ",";  // Using 3 decimal places for more precision
+    json += "\"aveGyro\":" + String(state.aveGyro, 2);
+    json += "}";
+    state.server.send(200, "application/json", json);
 }
 
 void handle_Settings_Update() {
@@ -1053,57 +1059,54 @@ void start_I2C_communication(int MPU) {
     Wire.write(B00000011); // Level 3
     Wire.endTransmission(true);
 
-    // Set gyro full scale Range:
+    // Set gyro full scale Range to ±2000 deg/s
     Wire.beginTransmission(MPU);  
     Wire.write(0x1B); 
-    Wire.write(B00011000);
-    state.gyroFactor = 16.4;  // +/- 2000 deg/s
+    Wire.write(B00011000);  // 0x18 = ±2000 deg/s
+    state.gyroFactor = 16.4;  // Correct factor for ±2000 deg/s
     Wire.endTransmission(true);
 
-    // Set accel full scale Range:
+    // Set accel full scale Range - pick ONE of these ranges:
     Wire.beginTransmission(MPU);  
     Wire.write(0x1C); 
     Wire.write(B00000000);
     state.accelFactor = 16384;  // +/- 2g
-    Wire.write(B00001000);
-    state.accelFactor = 8192;   // +/- 4g
-    Wire.write(B00010000);
-    state.accelFactor = 4096;   // +/- 8g
-    Wire.write(B00011000);
-    state.accelFactor = 2048;   // +/- 16g
+    //Wire.write(B00001000);
+    //state.accelFactor = 8192;   // +/- 4g
+    //Wire.write(B00010000);
+    //state.accelFactor = 4096;   // +/- 8g
+    //Wire.write(B00011000);
+    //state.accelFactor = 2048;   // +/- 16g
     Wire.endTransmission(true);
 }
 
-void get_accel_data(int MPU, int16_t output_array[9]) {
-    // Note: output_array must be a GLOBAL array variable
-
+void get_accel_data(int MPU, float output_array[9]) {
     Wire.beginTransmission(MPU);
     Wire.write(0x3B);  
     Wire.endTransmission(false);
     Wire.requestFrom(MPU,14,1);
-    //Wire.requestFrom(MPU,14,true);
 
-    int i = 0;
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcX
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcY
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // AcZ
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // Tmp
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyX
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyY
-    output_array[i]=Wire.read()<<8|Wire.read();i+=1;  // GyZ
+    // Read raw values into temporary int16_t variables
+    int16_t rawAccX = Wire.read()<<8|Wire.read();  // AcX
+    int16_t rawAccY = Wire.read()<<8|Wire.read();  // AcY
+    int16_t rawAccZ = Wire.read()<<8|Wire.read();  // AcZ
+    int16_t rawTemp = Wire.read()<<8|Wire.read();  // Tmp
+    int16_t rawGyroX = Wire.read()<<8|Wire.read(); // GyX
+    int16_t rawGyroY = Wire.read()<<8|Wire.read(); // GyY
+    int16_t rawGyroZ = Wire.read()<<8|Wire.read(); // GyZ
 
-    output_array[0] = output_array[0] / state.accelFactor;  // Convert accel to units of g
-    output_array[1] = output_array[1] / state.accelFactor;  // Convert accel to units of g
-    output_array[2] = output_array[2] / state.accelFactor;  // Convert accel to units of g
-    output_array[3] = output_array[3] / 340;                // Convert Temp to units of degrees C
-    output_array[4] = output_array[4] / state.gyroFactor;   // Convert gyro to units of degree / sec
-    output_array[5] = output_array[5] / state.gyroFactor;   // Convert gyro to units of degree / sec
-    output_array[6] = output_array[6] / state.gyroFactor;   // Convert gyro to units of degree / sec
+    // Convert and store values directly as floats
+    output_array[0] = (float)rawAccX / state.accelFactor;
+    output_array[1] = (float)rawAccY / state.accelFactor;
+    output_array[2] = (float)rawAccZ / state.accelFactor;
+    output_array[3] = (float)rawTemp / 340.0 + 36.53;
+    output_array[4] = (float)rawGyroX / state.gyroFactor;
+    output_array[5] = (float)rawGyroY / state.gyroFactor;
+    output_array[6] = (float)rawGyroZ / state.gyroFactor;
 
-    output_array[7] = sqrt(sq(output_array[0])+sq(output_array[1])+sq(output_array[2])); // Mag. of acceleration
-    output_array[8] = sqrt(sq(output_array[4])+sq(output_array[5])+sq(output_array[6])); // Mag. of rotation
-    output_array[7] = abs(output_array[7]);
-    output_array[8] = abs(output_array[8]);
+    // Calculate and store magnitudes
+    output_array[7] = sqrt(sq(output_array[0]) + sq(output_array[1]) + sq(output_array[2]));  // accel magnitude
+    output_array[8] = sqrt(sq(output_array[4]) + sq(output_array[5]) + sq(output_array[6]));  // gyro magnitude
 }
 
 void setup() {
@@ -1152,6 +1155,9 @@ void loop() {
         // Calculate average gyro reading
         state.aveGyro = (state.accel1[8] + state.accel2[8]) / 2.0;
         
+        // Update motion statistics immediately after reading sensors
+        updateMotionStats();
+        
         // Check manual triggers
         state.localTriggerState1 = digitalRead(state.MANUAL_TRIGGER_1);
         state.localTriggerState2 = digitalRead(state.MANUAL_TRIGGER_2);
@@ -1167,8 +1173,9 @@ void loop() {
             state.currentStats.accelTriggersCount++;
             
             // Update acceleration statistics
-            if (state.aveGyro > state.currentStats.highestAccelReading) {
-                state.currentStats.highestAccelReading = state.aveGyro;
+            if (state.aveGyro > state.currentStats.highestGyroReading) {
+                state.currentStats.highestGyroReading = state.aveGyro;
+                saveStats();  // Save when we hit a new high
             }
             state.currentStats.averageAccelTrigger = 
                 (state.currentStats.averageAccelTrigger * (state.currentStats.accelTriggersCount - 1) + state.aveGyro) 
@@ -1277,5 +1284,22 @@ void logFireStatus(float currentFireDuration, const char* eventType) {
         digitalRead(state.FIRE_PIN_1) ? "HIGH" : "LOW",
         digitalRead(state.FIRE_PIN_2) ? "HIGH" : "LOW"
     );
+}
+    
+void updateMotionStats() {
+    // Track highest angular acceleration
+    float currentGyro = abs(state.aveGyro);
+    if (currentGyro > state.currentStats.highestGyroReading) {
+        state.currentStats.highestGyroReading = currentGyro;
+        saveStats();
+    }
+
+    // Track highest linear acceleration from either sensor
+    float currentAccel = max(state.accel1[7], state.accel2[7]);
+    if (currentAccel > state.currentStats.highestAccelReading) {
+        state.currentStats.highestAccelReading = currentAccel;
+        Serial.printf("New highest linear acceleration: %.2f g\n", currentAccel); // Debug print
+        saveStats();
+    }
 }
     
