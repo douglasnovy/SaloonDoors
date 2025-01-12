@@ -313,62 +313,107 @@ String prepare_Root_Page()
 }
 
 // prepare a web page to be send to a client (web browser)
-String prepare_Data_Page()
-{
-  String htmlPage =
-            String("") +
-            "<!DOCTYPE HTML>" +
-            "<HTML>" +
-            "<HEAD>" +
-            "<TITLE>Saloon Doors Data</TITLE>" +
-            "<script>" +
-            "function updateData() {" +
-            "  fetch('/data/status')" +
-            "  .then(response => response.json())" +
-            "  .then(data => {" +
-            "    document.getElementById('resetTimer').innerHTML = data.resetTimer.toFixed(2);" +
-            "    document.getElementById('resetLimit').innerHTML = data.resetLimit.toFixed(2);" +
-            "    document.getElementById('resetState').innerHTML = data.resetState;" +
-            "    document.getElementById('fireTimer').innerHTML = data.fireTimer.toFixed(2);" +
-            "    document.getElementById('fireTimeLimit').innerHTML = data.fireTimeLimit.toFixed(2);" +
-            "    document.getElementById('remoteTrigger').innerHTML = data.remoteTriggerState;" +
-            "    document.getElementById('localTrigger1').innerHTML = data.localTriggerState1;" +
-            "    document.getElementById('localTrigger2').innerHTML = data.localTriggerState2;" +
-            "    document.getElementById('fireOn').innerHTML = data.fireOn;" +
-            "    document.getElementById('accel1').innerHTML = data.accel1.toFixed(2);" +
-            "    document.getElementById('accel2').innerHTML = data.accel2.toFixed(2);" +
-            "    document.getElementById('aveGyro').innerHTML = data.aveGyro.toFixed(2);" +
-            "  })" +
-            "  .catch(error => console.error('Error:', error));" +
-            "}" +
-            "document.addEventListener('DOMContentLoaded', function() {" +
-            "  updateData();" +  // Initial update
-            "  setInterval(updateData, 100);" +  // Update every 100ms
-            "});" +
-            "</script>" +
-            "</HEAD>" +
-            "<BODY style='font-size:300%;background-color:black;color:white'>" +
-            "<h3>Reset Timer [sec]: <span id='resetTimer'>" + String(state.resetTimer, 2) + "</span></h3>" +
-            "<h3>Reset Limit [sec]: <span id='resetLimit'>" + String(state.resetLimit, 2) + "</span></h3>" +
-            "<h3>Reset State: <span id='resetState'>" + state.resetState + "</span></h3>" +
-            "<h3>Fire Timer [sec]: <span id='fireTimer'>" + String(state.fireTimer, 2) + "</span></h3>" +
-            "<h3>Fire Time Limit [sec]: <span id='fireTimeLimit'>" + String(state.fireTimeLimit, 2) + "</span></h3>" +
-            "<h3>REMOTE_TRIGGER_STATE: <span id='remoteTrigger'>" + state.remoteTriggerState + "</span></h3>" +
-            "<h3>LOCAL_TRIGGER_STATE_1: <span id='localTrigger1'>" + digitalRead(state.MANUAL_TRIGGER_1) + "</span></h3>" +
-            "<h3>LOCAL_TRIGGER_STATE_2: <span id='localTrigger2'>" + digitalRead(state.MANUAL_TRIGGER_2) + "</span></h3>" +
-            "<h3>FIRE_ON: <span id='fireOn'>" + state.fireOn + "</span></h3>" +
-            "<h3>ACCEL_1: <span id='accel1'>" + String(state.accel1[8], 2) + "</span></h3>" +
-            "<h3>ACCEL_2: <span id='accel2'>" + String(state.accel2[8], 2) + "</span></h3>" +
-            "<h3>AVE_GYRO: <span id='aveGyro'>" + String(state.aveGyro, 2) + "</span></h3>" +
-            "<br>" +
-            "<p><a href='/'>Root Page</a></p>" +
-            "<p><a href='/settings'>Settings Control Page</a></p>" +
-            "<p><a href='/fire'>Fire Control Page</a></p>" +
-            "<p><a href='/data'>Data Page</a></p>" +
-            "</BODY>" +
-            "</HTML>";
-            
-  return htmlPage;
+String prepare_Data_Page() {
+    String htmlPage;
+    htmlPage.reserve(4096);  // Pre-allocate memory
+    
+    htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
+    htmlPage += "<TITLE>Saloon Doors Data</TITLE>";
+    htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<style>";
+    // Add consistent styling
+    htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; }";
+    htmlPage += ".data-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
+    htmlPage += ".data-title { color:#4CAF50; margin-bottom:10px; font-size:120%; }";
+    htmlPage += ".data-row { margin:8px 0; }";
+    htmlPage += ".value { color:#FFA500; }";  // Orange color for values
+    htmlPage += "a { color:#4CAF50; text-decoration:none; }";  // Green links
+    htmlPage += "a:hover { color:#45a049; }";
+    htmlPage += ".bool-true { color: #4CAF50; font-weight: bold; }";  // Green
+    htmlPage += ".bool-false { color: #ff4444; font-weight: bold; }"; // Red
+    htmlPage += ".state-firing { color: #ff4444; font-weight: bold; }";  // Red for firing
+    htmlPage += ".state-idle { color: #4CAF50; font-weight: bold; }";    // Green for idle
+    htmlPage += "</style>";
+    
+    // Keep existing JavaScript but move it here
+    htmlPage += "<script>";
+    htmlPage += "function updateData() {";
+    htmlPage += "  fetch('/data/status')";
+    htmlPage += "  .then(response => response.json())";
+    htmlPage += "  .then(data => {";
+    htmlPage += "    Object.keys(data).forEach(key => {";
+    htmlPage += "      const elem = document.getElementById(key);";
+    htmlPage += "      if (elem) {";
+    htmlPage += "        if (key === 'resetState') {";
+    htmlPage += "          elem.className = data[key] ? 'bool-true' : 'bool-false';";
+    htmlPage += "          elem.textContent = data[key] ? 'READY' : 'WAITING';";
+    htmlPage += "        } else if (key === 'fireOn') {";
+    htmlPage += "          elem.className = data[key] ? 'state-firing' : 'state-idle';";
+    htmlPage += "          elem.textContent = data[key] ? 'FIRING' : 'IDLE';";
+    htmlPage += "        } else if (key === 'remoteTriggerState' || key === 'localTriggerState1' || key === 'localTriggerState2') {";
+    htmlPage += "          elem.className = !data[key] ? 'state-firing' : 'state-idle';";  // Using same classes as fire state
+    htmlPage += "          elem.textContent = !data[key] ? 'ACTIVE' : 'INACTIVE';";
+    htmlPage += "        } else {";
+    htmlPage += "          elem.textContent = typeof data[key] === 'number' ? data[key].toFixed(2) : data[key];";
+    htmlPage += "        }";
+    htmlPage += "      }";
+    htmlPage += "    });";
+    htmlPage += "  })";
+    htmlPage += "  .catch(error => console.error('Error:', error));";
+    htmlPage += "}";
+    htmlPage += "document.addEventListener('DOMContentLoaded', function() {";
+    htmlPage += "  updateData();";
+    htmlPage += "  setInterval(updateData, 100);";
+    htmlPage += "});";
+    htmlPage += "</script>";
+    htmlPage += "</HEAD><BODY>";
+
+    // Title
+    htmlPage += "<h2>&#128293Live Data&#128293</h2>";
+
+    // Timer Status Section
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Timer Status</div>";
+    htmlPage += "<div class='data-row'>Reset Timer [sec]<br><span class='value' id='resetTimer'>0.00</span> / <span class='value' id='resetLimit'>0.00</span></div>";
+    htmlPage += "<div class='data-row'>Fire Timer [sec]<br><span class='value' id='fireTimer'>0.00</span> / <span class='value' id='fireTimeLimit'>0.00</span></div>";
+    htmlPage += "</div>";
+
+    // System State Section
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>System State</div>";
+    htmlPage += "<div class='data-row'>Reset State<br><span id='resetState'>0</span></div>";
+    htmlPage += "<div class='data-row'>Fire State<br><span id='fireOn'>0</span></div>";
+    htmlPage += "</div>";
+
+    // Trigger States Section
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Trigger States</div>";
+    htmlPage += "<div class='data-row'>Remote Trigger<br><span id='remoteTriggerState'>0</span></div>";
+    htmlPage += "<div class='data-row'>Local Trigger 1<br><span id='localTriggerState1'>0</span></div>";
+    htmlPage += "<div class='data-row'>Local Trigger 2<br><span id='localTriggerState2'>0</span></div>";
+    htmlPage += "</div>";
+
+    // Sensor Readings Section
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Sensor Readings</div>";
+    htmlPage += "<div class='data-row'>Accelerometer 1 [g]<br><span class='value' id='accel1'>0.00</span></div>";
+    htmlPage += "<div class='data-row'>Accelerometer 2 [g]<br><span class='value' id='accel2'>0.00</span></div>";
+    htmlPage += "<div class='data-row'>Gyro [deg/sec]<br><span class='value' id='aveGyro'>0.00</span></div>";
+    htmlPage += "</div>";
+
+    // Navigation Links
+    htmlPage += "<br>";
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-row'><a href='/'>Root Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/settings'>Settings Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/fire'>Fire Control Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/data'>Refresh Data Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/stats'>Statistics Page</a></div>";
+    htmlPage += "</div>";
+
+    htmlPage += "</BODY></HTML>";
+    
+    return htmlPage;
 }
 
 // prepare a web page to be send to a client (web browser)
