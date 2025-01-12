@@ -114,6 +114,10 @@ struct SystemState {
     // Current settings and stats
     FireSettings currentSettings;
     SystemStats currentStats;
+
+    // Add pseudo fire pin states
+    bool firePinState1 = false;
+    bool firePinState2 = false;
 };
 
 // Create the single global state instance
@@ -147,7 +151,7 @@ void stopFire() {
         float fireDuration = (currentTime - state.fireStartTime) / 1000.0;
         
         // Log the final state before stopping
-        logFireStatus(fireDuration, "Final");
+        //logFireStatus(fireDuration, "Final");
         
         // Validate and record fire duration with increased tolerance (5 loop cycles worth)
         if (fireDuration > 0 && fireDuration <= state.fireTimeLimit + (state.loopRate * 5)) {
@@ -160,7 +164,7 @@ void stopFire() {
             }
             saveStats();
         } else {
-            logFireStatus(fireDuration, "Invalid");
+            //logFireStatus(fireDuration, "Invalid");
         }
         
         // Ensure fire pins are disabled
@@ -429,48 +433,76 @@ String prepare_Data_Page() {
     htmlPage += "</style>";
     
     htmlPage += "<script>";
+    // Cache DOM elements on load for better performance
+    htmlPage += "let elements = {};";
+    htmlPage += "document.addEventListener('DOMContentLoaded', function() {";
+    htmlPage += "  ['pin1', 'pin2', 'resetState', 'fireOn', 'remoteTriggerState',";
+    htmlPage += "   'localTriggerState1', 'localTriggerState2', 'resetTimer',";
+    htmlPage += "   'resetLimit', 'fireTimer', 'fireTimeLimit', 'accel1', 'accel2', 'aveGyro'";
+    htmlPage += "  ].forEach(id => elements[id] = document.getElementById(id));";
+    htmlPage += "});";
+
+    // Optimize the update function
+    htmlPage += "function updateElement(id, value, type) {";
+    htmlPage += "  const elem = elements[id];";
+    htmlPage += "  if (!elem) return;";
+    htmlPage += "  if (elem._lastValue === value) return;"; // Skip if value hasn't changed
+    htmlPage += "  elem._lastValue = value;";
+    htmlPage += "  switch (type) {";
+    htmlPage += "    case 'pin':";
+    htmlPage += "      elem.className = value ? 'state-firing' : 'state-idle';";
+    htmlPage += "      elem.textContent = value ? 'FIRE' : 'IDLE';";
+    htmlPage += "      break;";
+    htmlPage += "    case 'trigger':";
+    htmlPage += "      elem.className = !value ? 'state-firing' : 'state-idle';";
+    htmlPage += "      elem.textContent = !value ? 'ACTIVE' : 'INACTIVE';";
+    htmlPage += "      break;";
+    htmlPage += "    case 'reset':";
+    htmlPage += "      elem.className = value ? 'bool-true' : 'bool-false';";
+    htmlPage += "      elem.textContent = value ? 'READY' : 'WAITING';";
+    htmlPage += "      break;";
+    htmlPage += "    case 'fire':";
+    htmlPage += "      elem.className = value ? 'state-firing' : 'state-idle';";
+    htmlPage += "      elem.textContent = value ? 'FIRING' : 'IDLE';";
+    htmlPage += "      break;";
+    htmlPage += "    case 'number':";
+    htmlPage += "      elem.textContent = Number(value).toFixed(2);";
+    htmlPage += "      break;";
+    htmlPage += "    default:";
+    htmlPage += "      elem.textContent = value;";
+    htmlPage += "  }";
+    htmlPage += "}";
+
+    // Main update function
     htmlPage += "function updateData() {";
     htmlPage += "  fetch('/data/status')";
-    htmlPage += "  .then(response => response.json())";
-    htmlPage += "  .then(data => {";
-    htmlPage += "    if (data.firePin1) {";
-    htmlPage += "      document.getElementById('pin1').className = 'state-firing';";
-    htmlPage += "      document.getElementById('pin1').textContent = 'FIRE';";
-    htmlPage += "    } else {";
-    htmlPage += "      document.getElementById('pin1').className = 'state-idle';";
-    htmlPage += "      document.getElementById('pin1').textContent = 'IDLE';";
-    htmlPage += "    }";
-    htmlPage += "    if (data.firePin2) {";
-    htmlPage += "      document.getElementById('pin2').className = 'state-firing';";
-    htmlPage += "      document.getElementById('pin2').textContent = 'FIRE';";
-    htmlPage += "    } else {";
-    htmlPage += "      document.getElementById('pin2').className = 'state-idle';";
-    htmlPage += "      document.getElementById('pin2').textContent = 'IDLE';";
-    htmlPage += "    }";
-    htmlPage += "    Object.keys(data).forEach(key => {";
-    htmlPage += "      let elem = document.getElementById(key);";
-    htmlPage += "      if (elem && key !== 'firePin1' && key !== 'firePin2') {";  // Skip fire pins as they're handled above
-    htmlPage += "        if (key === 'resetState') {";
-    htmlPage += "          elem.className = data[key] ? 'bool-true' : 'bool-false';";
-    htmlPage += "          elem.textContent = data[key] ? 'READY' : 'WAITING';";
-    htmlPage += "        } else if (key === 'fireOn') {";
-    htmlPage += "          elem.className = data[key] ? 'state-firing' : 'state-idle';";
-    htmlPage += "          elem.textContent = data[key] ? 'FIRING' : 'IDLE';";
-    htmlPage += "        } else if (key === 'remoteTriggerState' || key === 'localTriggerState1' || key === 'localTriggerState2') {";
-    htmlPage += "          elem.className = !data[key] ? 'state-firing' : 'state-idle';";
-    htmlPage += "          elem.textContent = !data[key] ? 'ACTIVE' : 'INACTIVE';";
-    htmlPage += "        } else {";
-    htmlPage += "          elem.textContent = typeof data[key] === 'number' ? data[key].toFixed(2) : data[key];";
-    htmlPage += "        }";
-    htmlPage += "      }";
-    htmlPage += "    });";
-    htmlPage += "  })";
-    htmlPage += "  .catch(error => console.error('Error:', error));";
+    htmlPage += "    .then(response => response.json())";
+    htmlPage += "    .then(data => {";
+    htmlPage += "      updateElement('pin1', data.firePin1, 'pin');";
+    htmlPage += "      updateElement('pin2', data.firePin2, 'pin');";
+    htmlPage += "      updateElement('resetState', data.resetState, 'reset');";
+    htmlPage += "      updateElement('fireOn', data.fireOn, 'fire');";
+    htmlPage += "      updateElement('remoteTriggerState', data.remoteTriggerState, 'trigger');";
+    htmlPage += "      updateElement('localTriggerState1', data.localTriggerState1, 'trigger');";
+    htmlPage += "      updateElement('localTriggerState2', data.localTriggerState2, 'trigger');";
+    htmlPage += "      updateElement('resetTimer', data.resetTimer, 'number');";
+    htmlPage += "      updateElement('resetLimit', data.resetLimit, 'number');";
+    htmlPage += "      updateElement('fireTimer', data.fireTimer, 'number');";
+    htmlPage += "      updateElement('fireTimeLimit', data.fireTimeLimit, 'number');";
+    htmlPage += "      updateElement('accel1', data.accel1, 'number');";
+    htmlPage += "      updateElement('accel2', data.accel2, 'number');";
+    htmlPage += "      updateElement('aveGyro', data.aveGyro, 'number');";
+    htmlPage += "    })";
+    htmlPage += "    .catch(error => console.error('Error:', error));";
     htmlPage += "}";
-    htmlPage += "document.addEventListener('DOMContentLoaded', function() {";
+
+    // Initialize updates with requestAnimationFrame for better performance
+    htmlPage += "function startUpdates() {";
     htmlPage += "  updateData();";
-    htmlPage += "  setInterval(updateData, 50);";  // Change to 50ms to match fire control page
-    htmlPage += "});";
+    htmlPage += "  requestAnimationFrame(startUpdates);";
+    htmlPage += "}";
+
+    htmlPage += "document.addEventListener('DOMContentLoaded', startUpdates);";
     htmlPage += "</script>";
     htmlPage += "</HEAD><BODY>";
 
@@ -1048,29 +1080,40 @@ void handleResetDefaults() {
 }
 
 void handle_Data_Status() {
-    state.server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    state.server.sendHeader("Pragma", "no-cache");
-    state.server.sendHeader("Expires", "-1");
+    char json[512];  // Static buffer instead of String
+    snprintf(json, sizeof(json),
+        "{"
+        "\"resetTimer\":%.2f,"
+        "\"resetLimit\":%.2f,"
+        "\"resetState\":%d,"
+        "\"fireTimer\":%.2f,"
+        "\"fireTimeLimit\":%.2f,"
+        "\"remoteTriggerState\":%d,"
+        "\"localTriggerState1\":%d,"
+        "\"localTriggerState2\":%d,"
+        "\"fireOn\":%d,"
+        "\"accel1\":%.3f,"
+        "\"accel2\":%.3f,"
+        "\"aveGyro\":%.2f,"
+        "\"firePin1\":%d,"
+        "\"firePin2\":%d"
+        "}",
+        state.resetTimer,
+        state.resetLimit,
+        state.resetState,
+        state.fireTimer,
+        state.fireTimeLimit,
+        state.remoteTriggerState,
+        state.localTriggerState1,
+        state.localTriggerState2,
+        state.fireOn,
+        state.accel1[7],
+        state.accel2[7],
+        state.aveGyro,
+        state.firePinState1,
+        state.firePinState2
+    );
     
-    String json;
-    json.reserve(512);
-    
-    json += "{";
-    json += "\"resetTimer\":" + String(state.resetTimer, 2) + ",";
-    json += "\"resetLimit\":" + String(state.resetLimit, 2) + ",";
-    json += "\"resetState\":" + String(state.resetState) + ",";
-    json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
-    json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
-    json += "\"remoteTriggerState\":" + String(state.remoteTriggerState) + ",";
-    json += "\"localTriggerState1\":" + String(state.localTriggerState1) + ",";
-    json += "\"localTriggerState2\":" + String(state.localTriggerState2) + ",";
-    json += "\"fireOn\":" + String(state.fireOn) + ",";
-    json += "\"accel1\":" + String(state.accel1[7], 3) + ",";
-    json += "\"accel2\":" + String(state.accel2[7], 3) + ",";
-    json += "\"aveGyro\":" + String(state.aveGyro, 2) + ",";
-    json += "\"firePin1\":" + String(digitalRead(state.FIRE_PIN_1)) + ",";
-    json += "\"firePin2\":" + String(digitalRead(state.FIRE_PIN_2));
-    json += "}";
     state.server.send(200, "application/json", json);
 }
 
@@ -1189,21 +1232,26 @@ void handle_Settings_Reset() {
 }
 
 void handle_Fire_Status() {
-    String json;
-    json.reserve(256);
+    char json[256];
+    snprintf(json, sizeof(json),
+        "{"
+        "\"fireOn\":%d,"
+        "\"resetTimer\":%.2f,"
+        "\"resetLimit\":%.2f,"
+        "\"fireTimer\":%.2f,"
+        "\"fireTimeLimit\":%.2f,"
+        "\"firePin1\":%d,"
+        "\"firePin2\":%d"
+        "}",
+        state.fireOn,
+        state.resetTimer,
+        state.resetLimit,
+        state.fireTimer,
+        state.fireTimeLimit,
+        state.firePinState1,
+        state.firePinState2
+    );
     
-    json = "{";
-    json += "\"fireOn\":" + String(state.fireOn) + ",";
-    json += "\"resetTimer\":" + String(state.resetTimer, 2) + ",";
-    json += "\"resetLimit\":" + String(state.resetLimit, 2) + ",";
-    json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
-    json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
-    json += "\"firePin1\":" + String(digitalRead(state.FIRE_PIN_1)) + ",";
-    json += "\"firePin2\":" + String(digitalRead(state.FIRE_PIN_2));
-    json += "}";
-    
-    state.server.sendHeader("Access-Control-Allow-Origin", "*");
-    state.server.sendHeader("Cache-Control", "no-cache");
     state.server.send(200, "application/json", json);
 }
 
@@ -1480,16 +1528,21 @@ void setup() {
 }
 
 void loop() {
-    // Main control loop with watchdog protection
-    state.dnsServer.processNextRequest();
-    state.server.handleClient();
-    
-    // Use micros() for more precise timing
+    // Process network requests frequently
+    static unsigned long lastNetworkUpdate = 0;
     static unsigned long lastUpdate = 0;
     static unsigned long lastFireCycleUpdate = 0;
+    const unsigned long networkInterval = 500;  // 500 microseconds between network processing
     const unsigned long updateInterval = state.loopRate * 1000000; // Convert to microseconds
     
     unsigned long currentMicros = micros();
+    
+    // Handle network with minimum interval
+    if (currentMicros - lastNetworkUpdate >= networkInterval) {
+        state.dnsServer.processNextRequest();
+        state.server.handleClient();
+        lastNetworkUpdate = currentMicros;
+    }
     
     // Update sensors and main control at specified interval
     if (currentMicros - lastUpdate >= updateInterval) {
@@ -1511,7 +1564,6 @@ void loop() {
         
         // Determine if we should trigger based on acceleration
         if (state.aveGyro > state.minGyro && state.resetTimer >= state.resetLimit && !state.fireOn) {
-            // Calculate fire duration based on gyro reading
             float scale = (state.aveGyro - state.minGyro) / (state.maxGyro - state.minGyro);
             scale = constrain(scale, 0.0, 1.0);
             state.fireTimeLimit = state.minFireTime + scale * (state.maxFireTime - state.minFireTime);
@@ -1522,7 +1574,7 @@ void loop() {
             // Update acceleration statistics
             if (state.aveGyro > state.currentStats.highestGyroReading) {
                 state.currentStats.highestGyroReading = state.aveGyro;
-                saveStats();  // Save when we hit a new high
+                saveStats();
             }
             state.currentStats.averageAccelTrigger = 
                 (state.currentStats.averageAccelTrigger * (state.currentStats.accelTriggersCount - 1) + state.aveGyro) 
@@ -1540,32 +1592,29 @@ void loop() {
         
         // Fire control logic
         if (state.fireOn) {
-            // Only do fire cycling if fireCycle > 0
-            if (state.fireCycle > 0) {
-                // Use separate high-precision timer for fire cycling
-                if (currentMicros - lastFireCycleUpdate >= (state.fireCycle * 1000000)) {
-                    lastFireCycleUpdate = currentMicros;
-                    state.fireCycleToggle = !state.fireCycleToggle; // Toggle between true/false
-                }
+            // Only check fire cycle timing if cycle is enabled
+            if (state.fireCycle > 0 && currentMicros - lastFireCycleUpdate >= (state.fireCycle * 1000000)) {
+                lastFireCycleUpdate = currentMicros;
+                state.fireCycleToggle = !state.fireCycleToggle;
                 
-                if (state.fireCycleToggle) {
-                    digitalWrite(state.FIRE_PIN_1, HIGH);
-                    digitalWrite(state.FIRE_PIN_2, LOW);
-                } else {
-                    digitalWrite(state.FIRE_PIN_1, LOW);
-                    digitalWrite(state.FIRE_PIN_2, HIGH);
-                }
-            } else {
+                // Update pins based on cycle state
+                digitalWrite(state.FIRE_PIN_1, state.fireCycleToggle ? HIGH : LOW);
+                digitalWrite(state.FIRE_PIN_2, state.fireCycleToggle ? LOW : HIGH);
+                state.firePinState1 = state.fireCycleToggle;
+                state.firePinState2 = !state.fireCycleToggle;
+            } else if (state.fireCycle == 0) {
                 // When fireCycle is 0, fire both pins simultaneously
                 digitalWrite(state.FIRE_PIN_1, HIGH);
                 digitalWrite(state.FIRE_PIN_2, HIGH);
+                state.firePinState1 = true;
+                state.firePinState2 = true;
             }
             
-            // Use millis() for overall fire duration timing
+            // Check fire duration
             float currentFireDuration = (millis() - state.fireStartTime) / 1000.0;
+            state.fireTimer = currentFireDuration;  // Keep fireTimer in sync
             
-            // Add debug output
-            logFireStatus(currentFireDuration);
+            //logFireStatus(currentFireDuration);
             
             if (currentFireDuration >= state.fireTimeLimit) {
                 stopFire();
@@ -1575,35 +1624,36 @@ void loop() {
                 state.resetTimer = 0;
                 digitalWrite(state.FIRE_PIN_1, LOW);
                 digitalWrite(state.FIRE_PIN_2, LOW);
+                state.firePinState1 = false;
+                state.firePinState2 = false;
             }
         } else {
             digitalWrite(state.FIRE_PIN_1, LOW);
             digitalWrite(state.FIRE_PIN_2, LOW);
-            lastFireCycleUpdate = currentMicros; // Reset the cycle timer when not firing
+            state.firePinState1 = false;
+            state.firePinState2 = false;
+            lastFireCycleUpdate = currentMicros;
         }
         
         // Update timers
         if (state.fireOn) {
             float currentFireDuration = (millis() - state.fireStartTime) / 1000.0;
-            state.fireTimer = currentFireDuration;  // Sync fireTimer with actual duration
+            state.fireTimer = currentFireDuration;
         } else if (!state.resetState && state.resetTimer < state.resetLimit) {
             state.resetTimer += state.loopRate;
-            // Add logging for reset period
-            logFireStatus(0, "Reset");  // Duration is 0 during reset period
+            //logFireStatus(0, "Reset");
             
-            // Add this check to update resetState when timer completes
             if (state.resetTimer >= state.resetLimit) {
                 state.resetState = 1;
                 Serial.println("Reset complete - system ready");
             }
         }
         
-        // Update memory usage statistics
+        // Memory usage statistics
         uint32_t freeHeap = ESP.getFreeHeap();
         uint32_t maxFreeBlock = ESP.getMaxFreeBlockSize();
         uint32_t heapFragmentation = ESP.getHeapFragmentation();
         
-        // Calculate memory usage considering both total free and largest block
         float currentMemUsage = 100.0 * (1.0 - ((float)maxFreeBlock / (float)freeHeap));
         currentMemUsage = constrain(currentMemUsage, 0.0, 100.0);
         
@@ -1615,8 +1665,7 @@ void loop() {
         }
     }
     
-    // Small delay to prevent WiFi issues
-    delay(1);
+    yield();
 }
 // Add near other constants
 static_assert(sizeof(FireSettings) + sizeof(SystemStats) + EEPROMConfig::EEPROM_DATA_ADDR <= EEPROMConfig::EEPROM_SIZE, 
@@ -1634,8 +1683,8 @@ void logFireStatus(float currentFireDuration, const char* eventType) {
         state.resetTimer,
         state.resetLimit,
         (int)((state.resetTimer / state.resetLimit) * 100),        // Reset progress
-        digitalRead(state.FIRE_PIN_1) ? "HIGH" : "LOW",
-        digitalRead(state.FIRE_PIN_2) ? "HIGH" : "LOW"
+        state.firePinState1 ? "HIGH" : "LOW",
+        state.firePinState2 ? "HIGH" : "LOW"
     );
 }
     
