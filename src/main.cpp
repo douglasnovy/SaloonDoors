@@ -575,69 +575,173 @@ String prepare_Fire_Control_Page() {
 }
 
 // prepare a web page to be send to a client (web browser)
-String prepare_Fire_Settings_Page()
-{
-    String htmlPage =
-            String("") +
-            "<!DOCTYPE HTML>" +
-            "<HTML>" +
-            "<HEAD>" +
-            "<TITLE>Saloon Doors Settings</TITLE>" +
-            "<script>" +
-            "function submitSettings(event) {" +
-            "  event.preventDefault();" +
-            "  const form = document.getElementById('settingsForm');" +
-            "  const formData = new URLSearchParams(new FormData(form));" +
-            "  fetch('/settings/action_page', {" +
-            "    method: 'POST'," +
-            "    headers: {" +
-            "      'Content-Type': 'application/x-www-form-urlencoded'" +
-            "    }," +
-            "    body: formData.toString()" +
-            "  })" +
-            "  .then(response => {" +
-            "    if(response.ok) {" +
-            "      alert('Settings updated successfully!');" +
-            "      location.reload();" +
-            "    } else {" +
-            "      response.text().then(text => alert('Error: ' + text));" +
-            "    }" +
-            "  })" +
-            "  .catch(error => {" +
-            "    console.error('Error:', error);" +
-            "    alert('Error updating settings: ' + error);" +
-            "  });" +
-            "}" +
-            "function resetDefaults() {" +
-            "  if(confirm('Reset to default settings?')) {" +
-            "    fetch('/settings/reset', {method: 'POST'})" +
-            "    .then(response => {" +
-            "      if(response.ok) {" +
-            "        alert('Settings reset to defaults');" +
-            "        location.reload();" +
-            "      }" +
-            "    });" +
-            "  }" +
-            "}" +
-            "</script>" +
-            "</HEAD>" +
-            "<BODY style='font-size:300%;background-color:black;color:white'>" +
-            "<form id='settingsForm' onsubmit='submitSettings(event)' method='POST' enctype='application/x-www-form-urlencoded'>" +  // Added method and enctype
-            "MIN Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MIN_GYRO' value='" + state.minGyro + "'><br>" +
-            "MAX Gyro [degree/sec]:<br><input style='font-size:150%' type='number' name='MAX_GYRO' value='" + state.maxGyro + "'><br>" +
-            "MIN Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MIN_FIRE_TIME' value='" + state.minFireTime + "'><br>" +
-            "MAX Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='MAX_FIRE_TIME' value='" + state.maxFireTime + "'><br>" +
-            "RESET Time Limit [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='RESET_LIMIT' value='" + state.resetLimit + "'><br>" +
-            "Fire Cycle Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='FIRE_CYCLE' value='" + state.fireCycle + "'><br>" +
-            "Remote Fire Time [sec]:<br><input style='font-size:150%' type='number' step='0.01' name='REMOTE_FIRE_TIME' value='" + state.remoteFireTime + "'><br><br><br>" +
-            "<input type='submit' style='font-size:300%;color:red' value='UPDATE'>" +
-            "</form>" +
-            "<br>" +
-            "<button onclick='resetDefaults()' style='font-size:300%;color:orange'>Reset to Defaults</button>" +
-            // ... navigation links ...
-            "</BODY>" +
-            "</HTML>";
-            
+String prepare_Fire_Settings_Page() {
+    String htmlPage;
+    htmlPage.reserve(4096);  // Pre-allocate memory
+    
+    htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
+    htmlPage += "<TITLE>Saloon Doors Settings</TITLE>";
+    htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<style>";
+    // Base styling to match other pages
+    htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; }";
+    htmlPage += ".data-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
+    htmlPage += ".data-title { color:#4CAF50; margin-bottom:10px; font-size:120%; }";
+    htmlPage += ".data-row { margin:8px 0; }";
+    htmlPage += ".value { color:#FFA500; }";
+    htmlPage += "a { color:#4CAF50; text-decoration:none; }";
+    htmlPage += "a:hover { color:#45a049; }";
+    
+    // Input styling
+    htmlPage += "input[type='number'] {";
+    htmlPage += "  width: 120px;";
+    htmlPage += "  padding: 8px;";
+    htmlPage += "  margin: 5px 0;";
+    htmlPage += "  border: 2px solid #4CAF50;";
+    htmlPage += "  border-radius: 4px;";
+    htmlPage += "  background-color: #222;";
+    htmlPage += "  color: #FFA500;";
+    htmlPage += "  font-size: 100%;";
+    htmlPage += "}";
+    
+    // Button styling
+    htmlPage += ".action-button {";
+    htmlPage += "  background-color: #4CAF50;";
+    htmlPage += "  color: white;";
+    htmlPage += "  padding: 15px 32px;";
+    htmlPage += "  border: none;";
+    htmlPage += "  border-radius: 4px;";
+    htmlPage += "  font-size: 100%;";
+    htmlPage += "  cursor: pointer;";
+    htmlPage += "  margin: 10px 0;";
+    htmlPage += "  width: 100%;";
+    htmlPage += "  transition: background-color 0.3s;";
+    htmlPage += "}";
+    htmlPage += ".reset-button { background-color: #ff4444; }";
+    htmlPage += ".action-button:hover { filter: brightness(110%); }";
+    htmlPage += ".unit { color: #888; font-size: 80%; }";
+    
+    // Form validation and submission
+    htmlPage += "</style><script>";
+    htmlPage += "function validateForm() {";
+    htmlPage += "  const inputs = document.querySelectorAll('input[type=\"number\"]');";
+    htmlPage += "  let valid = true;";
+    htmlPage += "  inputs.forEach(input => {";
+    htmlPage += "    const value = parseFloat(input.value);";
+    htmlPage += "    if (isNaN(value) || value < 0) {";
+    htmlPage += "      alert('All values must be positive numbers');";
+    htmlPage += "      input.focus();";
+    htmlPage += "      valid = false;";
+    htmlPage += "    }";
+    htmlPage += "  });";
+    htmlPage += "  const minFire = parseFloat(document.getElementsByName('MIN_FIRE_TIME')[0].value);";
+    htmlPage += "  const maxFire = parseFloat(document.getElementsByName('MAX_FIRE_TIME')[0].value);";
+    htmlPage += "  const minGyro = parseFloat(document.getElementsByName('MIN_GYRO')[0].value);";
+    htmlPage += "  const maxGyro = parseFloat(document.getElementsByName('MAX_GYRO')[0].value);";
+    htmlPage += "  if (minFire >= maxFire) {";
+    htmlPage += "    alert('Maximum fire time must be greater than minimum fire time');";
+    htmlPage += "    valid = false;";
+    htmlPage += "  }";
+    htmlPage += "  if (minGyro >= maxGyro) {";
+    htmlPage += "    alert('Maximum gyro must be greater than minimum gyro');";
+    htmlPage += "    valid = false;";
+    htmlPage += "  }";
+    htmlPage += "  return valid;";
+    htmlPage += "}";
+
+    // Add this new function for submitting the form via AJAX
+    htmlPage += "function submitForm(event) {";
+    htmlPage += "  event.preventDefault();";  // Prevent form from submitting normally
+    htmlPage += "  if (!validateForm()) return false;";
+    htmlPage += "  const formData = new FormData(document.getElementById('settingsForm'));";
+    htmlPage += "  fetch('/settings/action_page', {";
+    htmlPage += "    method: 'POST',";
+    htmlPage += "    body: formData";
+    htmlPage += "  })";
+    htmlPage += "  .then(response => {";
+    htmlPage += "    if (!response.ok) throw new Error('Network response was not ok');";
+    htmlPage += "    return response.text();";
+    htmlPage += "  })";
+    htmlPage += "  .then(data => {";
+    htmlPage += "    alert('Settings updated successfully');";  // Show popup
+    htmlPage += "  })";
+    htmlPage += "  .catch(error => {";
+    htmlPage += "    alert('Error updating settings: ' + error.message);";
+    htmlPage += "  });";
+    htmlPage += "  return false;";  // Prevent form submission
+    htmlPage += "}";
+
+    // Add resetDefaults function if not already present
+    htmlPage += "function resetDefaults() {";
+    htmlPage += "  if (confirm('Reset all settings to defaults?')) {";
+    htmlPage += "    fetch('/settings/reset', { method: 'POST' })";
+    htmlPage += "    .then(response => {";
+    htmlPage += "      if (!response.ok) throw new Error('Network response was not ok');";
+    htmlPage += "      return response.text();";
+    htmlPage += "    })";
+    htmlPage += "    .then(data => {";
+    htmlPage += "      alert('Settings reset to defaults');";
+    htmlPage += "      location.reload();";  // Reload page to show new values
+    htmlPage += "    })";
+    htmlPage += "    .catch(error => {";
+    htmlPage += "      alert('Error resetting settings: ' + error.message);";
+    htmlPage += "    });";
+    htmlPage += "  }";
+    htmlPage += "}";
+    htmlPage += "</script></HEAD><BODY>";
+
+    // Title
+    htmlPage += "<h2>&#128293Settings&#128293</h2>";
+
+    // Update the form tag to use onsubmit
+    htmlPage += "<form id='settingsForm' onsubmit='return submitForm(event)'>";
+
+    // Motion Detection Settings
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Motion Detection</div>";
+    htmlPage += "<div class='data-row'>Minimum Gyro <span class='unit'>[deg/sec]</span><br>";
+    htmlPage += "<input type='number' name='MIN_GYRO' value='" + String(state.minGyro, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "<div class='data-row'>Maximum Gyro <span class='unit'>[deg/sec]</span><br>";
+    htmlPage += "<input type='number' name='MAX_GYRO' value='" + String(state.maxGyro, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "</div>";
+
+    // Fire Duration Settings
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>Fire Duration</div>";
+    htmlPage += "<div class='data-row'>Minimum Fire Time <span class='unit'>[sec]</span><br>";
+    htmlPage += "<input type='number' name='MIN_FIRE_TIME' value='" + String(state.minFireTime, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "<div class='data-row'>Maximum Fire Time <span class='unit'>[sec]</span><br>";
+    htmlPage += "<input type='number' name='MAX_FIRE_TIME' value='" + String(state.maxFireTime, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "<div class='data-row'>Remote Fire Time <span class='unit'>[sec]</span><br>";
+    htmlPage += "<input type='number' name='REMOTE_FIRE_TIME' value='" + String(state.remoteFireTime, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "</div>";
+
+    // System Timing Settings
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-title'>System Timing</div>";
+    htmlPage += "<div class='data-row'>Reset Time Limit <span class='unit'>[sec]</span><br>";
+    htmlPage += "<input type='number' name='RESET_LIMIT' value='" + String(state.resetLimit, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "<div class='data-row'>Fire Cycle Time <span class='unit'>[sec]</span><br>";
+    htmlPage += "<input type='number' name='FIRE_CYCLE' value='" + String(state.fireCycle, 2) + "' step='0.01' min='0' required></div>";
+    htmlPage += "</div>";
+
+    // Action Buttons
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<input type='submit' class='action-button' value='Update Settings'>";
+    htmlPage += "<button type='button' class='action-button reset-button' onclick='resetDefaults()'>Reset to Defaults</button>";
+    htmlPage += "</div>";
+
+    htmlPage += "</form>";
+
+    // Navigation Links
+    htmlPage += "<div class='data-box'>";
+    htmlPage += "<div class='data-row'><a href='/'>Root Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/fire'>Fire Control Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/data'>Data Page</a></div>";
+    htmlPage += "<div class='data-row'><a href='/stats'>Statistics Page</a></div>";
+    htmlPage += "</div>";
+
+    htmlPage += "</BODY></HTML>";
     return htmlPage;
 }
 
@@ -865,17 +969,20 @@ void handle_Data_Status() {
 }
 
 void handle_Settings_Update() {
-    if (!state.server.hasArg("plain")) {
+    Serial.println("Form handler called"); // Keep debug print
+    
+    if (state.server.args() == 0) {
+        Serial.println("No data received"); // Keep debug print
         state.server.send(400, "text/plain", "No data received");
         return;
     }
 
-    String data = state.server.arg("plain");
-    
-    // Store old values for comparison
-    FireSettings oldSettings = state.currentSettings;
-    
-    // Parse form data
+    // Print all received arguments for debugging
+    for (int i = 0; i < state.server.args(); i++) {
+        Serial.printf("Arg %d: %s = %s\n", i, state.server.argName(i).c_str(), state.server.arg(i).c_str());
+    }
+
+    // Parse form data directly from arguments
     float newMinFireTime = state.server.arg("MIN_FIRE_TIME").toFloat();
     float newMaxFireTime = state.server.arg("MAX_FIRE_TIME").toFloat();
     float newResetLimit = state.server.arg("RESET_LIMIT").toFloat();
@@ -883,34 +990,34 @@ void handle_Settings_Update() {
     float newFireCycle = state.server.arg("FIRE_CYCLE").toFloat();
     float newMinGyro = state.server.arg("MIN_GYRO").toFloat();
     float newMaxGyro = state.server.arg("MAX_GYRO").toFloat();
-    
+
     // Validate input values
     if (newMinFireTime <= 0 || newMaxFireTime <= 0 || 
         newResetLimit <= 0 || newRemoteFireTime <= 0 || 
         newFireCycle < 0 || newMinFireTime >= newMaxFireTime ||
         newMinGyro <= 0 || newMaxGyro <= 0 || 
         newMinGyro >= newMaxGyro || newMaxGyro > 2000) {
-        Serial.println(F("Settings update rejected - Invalid values"));
+        Serial.println(F("Settings update rejected - Invalid values")); // Keep debug print
         state.server.send(400, "text/plain", "Invalid values provided");
         return;
     }
     
     // Log changes to serial
     Serial.println(F("\n=== Settings Update ==="));
-    if (oldSettings.minFireTime != newMinFireTime)
-        Serial.printf("Min Fire Time: %.2f -> %.2f\n", oldSettings.minFireTime, newMinFireTime);
-    if (oldSettings.maxFireTime != newMaxFireTime)
-        Serial.printf("Max Fire Time: %.2f -> %.2f\n", oldSettings.maxFireTime, newMaxFireTime);
-    if (oldSettings.remoteFireTime != newRemoteFireTime)
-        Serial.printf("Remote Fire Time: %.2f -> %.2f\n", oldSettings.remoteFireTime, newRemoteFireTime);
-    if (oldSettings.resetLimit != newResetLimit)
-        Serial.printf("Reset Limit: %.2f -> %.2f\n", oldSettings.resetLimit, newResetLimit);
-    if (oldSettings.fireCycle != newFireCycle)
-        Serial.printf("Fire Cycle: %.2f -> %.2f\n", oldSettings.fireCycle, newFireCycle);
-    if (oldSettings.minGyro != newMinGyro)
-        Serial.printf("Min Gyro: %.2f -> %.2f\n", oldSettings.minGyro, newMinGyro);
-    if (oldSettings.maxGyro != newMaxGyro)
-        Serial.printf("Max Gyro: %.2f -> %.2f\n", oldSettings.maxGyro, newMaxGyro);
+    if (state.currentSettings.minFireTime != newMinFireTime)
+        Serial.printf("Min Fire Time: %.2f -> %.2f\n", state.currentSettings.minFireTime, newMinFireTime);
+    if (state.currentSettings.maxFireTime != newMaxFireTime)
+        Serial.printf("Max Fire Time: %.2f -> %.2f\n", state.currentSettings.maxFireTime, newMaxFireTime);
+    if (state.currentSettings.remoteFireTime != newRemoteFireTime)
+        Serial.printf("Remote Fire Time: %.2f -> %.2f\n", state.currentSettings.remoteFireTime, newRemoteFireTime);
+    if (state.currentSettings.resetLimit != newResetLimit)
+        Serial.printf("Reset Limit: %.2f -> %.2f\n", state.currentSettings.resetLimit, newResetLimit);
+    if (state.currentSettings.fireCycle != newFireCycle)
+        Serial.printf("Fire Cycle: %.2f -> %.2f\n", state.currentSettings.fireCycle, newFireCycle);
+    if (state.currentSettings.minGyro != newMinGyro)
+        Serial.printf("Min Gyro: %.2f -> %.2f\n", state.currentSettings.minGyro, newMinGyro);
+    if (state.currentSettings.maxGyro != newMaxGyro)
+        Serial.printf("Max Gyro: %.2f -> %.2f\n", state.currentSettings.maxGyro, newMaxGyro);
     
     // Update settings
     state.currentSettings.minFireTime = newMinFireTime;
@@ -932,7 +1039,7 @@ void handle_Settings_Update() {
     
     // Save to EEPROM
     if (!saveSettings()) {
-        Serial.println(F("Failed to save settings to EEPROM"));
+        Serial.println(F("Failed to save settings to EEPROM")); // Keep debug print
         state.server.send(500, "text/plain", "Failed to save settings");
         return;
     }
@@ -940,6 +1047,7 @@ void handle_Settings_Update() {
     Serial.println(F("Settings updated and saved successfully"));
     Serial.println(F("=====================\n"));
     
+    // Send success response instead of redirecting
     state.server.send(200, "text/plain", "Settings updated successfully");
 }
 
