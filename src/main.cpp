@@ -285,31 +285,115 @@ bool loadSettings() {
 }
 
 // prepare a web page to be send to a client (web browser)
-String prepare_Root_Page()
-{
-  String htmlPage =
-            String("") +
-            "<!DOCTYPE HTML>" +
-            "<HTML>" +
-            "<HEAD>" +
-            "<meta name='viewport' content='width=device-width, initial-scale=1'>" +
-            "<meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate'>" +
-            "<meta http-equiv='Pragma' content='no-cache'>" +
-            "<meta http-equiv='Expires' content='0'>" +
-            "<TITLE>Saloon Doors Root</TITLE>" +
-            "</HEAD>" +
-            "<BODY style='font-size:225%;background-color:black;color:white'>" +
-            "<h2>&#128293<u>HighNoon</u>&#128293</h2>" +
-            "<br>" +
-            "<p><a href='/'>Root Page</a></p>" +
-            "<p><a href='/settings'>Settings Control Page</a></p>" +
-            "<p><a href='/fire'>Fire Control Page</a></p>" +
-            "<p><a href='/data'>Data Page</a></p>" +
-            "<p><a href='/stats'>Statistics Page</a></p>" +
-            "</BODY>" +
-            "</HTML>";
-          
-  return htmlPage;
+String prepare_Root_Page() {
+    String htmlPage;
+    htmlPage.reserve(2048);  // Pre-allocate memory
+    
+    htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
+    htmlPage += "<TITLE>HighNoon</TITLE>";
+    htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<style>";
+    // Base styling to match other pages
+    htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; text-align: center; }";
+    htmlPage += ".title { font-size: 2em; margin: 20px 0; text-shadow: 0 0 10px #ff6b6b; }";
+    
+    // Navigation card styling
+    htmlPage += ".nav-grid {";
+    htmlPage += "  display: grid;";
+    htmlPage += "  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));";
+    htmlPage += "  gap: 20px;";
+    htmlPage += "  max-width: 1200px;";
+    htmlPage += "  margin: 0 auto;";
+    htmlPage += "  padding: 20px;";
+    htmlPage += "}";
+    
+    htmlPage += ".nav-card {";
+    htmlPage += "  background: linear-gradient(145deg, #333 0%, #222 100%);";
+    htmlPage += "  border-radius: 15px;";
+    htmlPage += "  padding: 20px;";
+    htmlPage += "  text-align: center;";
+    htmlPage += "  transition: transform 0.3s, box-shadow 0.3s;";
+    htmlPage += "  cursor: pointer;";
+    htmlPage += "  box-shadow: 0 4px 8px rgba(0,0,0,0.2);";
+    htmlPage += "}";
+    
+    htmlPage += ".nav-card:hover {";
+    htmlPage += "  transform: translateY(-5px);";
+    htmlPage += "  box-shadow: 0 8px 16px rgba(255,107,107,0.2);";
+    htmlPage += "}";
+    
+    htmlPage += ".nav-card i {";
+    htmlPage += "  font-size: 2em;";
+    htmlPage += "  margin-bottom: 10px;";
+    htmlPage += "  color: #4CAF50;";
+    htmlPage += "}";
+    
+    htmlPage += "a {";
+    htmlPage += "  color: white;";
+    htmlPage += "  text-decoration: none;";
+    htmlPage += "}";
+    
+    htmlPage += ".card-title {";
+    htmlPage += "  color: #4CAF50;";
+    htmlPage += "  font-size: 1.2em;";
+    htmlPage += "  margin: 10px 0;";
+    htmlPage += "}";
+    
+    htmlPage += ".card-description {";
+    htmlPage += "  color: #888;";
+    htmlPage += "  font-size: 0.8em;";
+    htmlPage += "}";
+    
+    // Animated flame effect
+    htmlPage += "@keyframes flicker {";
+    htmlPage += "  0% { text-shadow: 0 0 10px #ff6b6b; }";
+    htmlPage += "  50% { text-shadow: 0 0 20px #ff6b6b, 0 0 30px #ff4444; }";
+    htmlPage += "  100% { text-shadow: 0 0 10px #ff6b6b; }";
+    htmlPage += "}";
+    
+    htmlPage += ".flame { animation: flicker 2s infinite; }";
+    htmlPage += "</style>";
+    htmlPage += "</HEAD><BODY>";
+
+    // Title with animated flames
+    htmlPage += "<h1 class='title'>🔥 <span class='flame'>HighNoon</span> 🔥</h1>";
+
+    // Navigation grid
+    htmlPage += "<div class='nav-grid'>";
+    
+    // Fire Control Card
+    htmlPage += "<a href='/fire'><div class='nav-card'>";
+    htmlPage += "<div class='card-title'>🎯 Fire Control</div>";
+    htmlPage += "<div class='card-description'>Trigger and monitor firing sequences</div>";
+    htmlPage += "</div></a>";
+    
+    // Settings Card
+    htmlPage += "<a href='/settings'><div class='nav-card'>";
+    htmlPage += "<div class='card-title'>⚙️ Settings</div>";
+    htmlPage += "<div class='card-description'>Configure system parameters</div>";
+    htmlPage += "</div></a>";
+    
+    // Data Monitor Card
+    htmlPage += "<a href='/data'><div class='nav-card'>";
+    htmlPage += "<div class='card-title'>📊 Live Data</div>";
+    htmlPage += "<div class='card-description'>Real-time system monitoring</div>";
+    htmlPage += "</div></a>";
+    
+    // Statistics Card
+    htmlPage += "<a href='/stats'><div class='nav-card'>";
+    htmlPage += "<div class='card-title'>📈 Statistics</div>";
+    htmlPage += "<div class='card-description'>System performance metrics</div>";
+    htmlPage += "</div></a>";
+    
+    htmlPage += "</div>";  // Close nav-grid
+
+    // Add version info or system status at bottom
+    htmlPage += "<div style='margin-top: 40px; color: #666; font-size: 0.6em;'>";
+    htmlPage += "HighNoon Control System v1.0";
+    htmlPage += "</div>";
+
+    htmlPage += "</BODY></HTML>";
+    return htmlPage;
 }
 
 // prepare a web page to be send to a client (web browser)
