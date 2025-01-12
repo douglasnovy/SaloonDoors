@@ -292,6 +292,7 @@ String prepare_Root_Page() {
     htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
     htmlPage += "<TITLE>HighNoon</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<meta charset='UTF-8'>";
     htmlPage += "<style>";
     // Base styling to match other pages
     htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; text-align: center; }";
@@ -404,6 +405,7 @@ String prepare_Data_Page() {
     htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
     htmlPage += "<TITLE>Saloon Doors Data</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<meta charset='UTF-8'>";
     htmlPage += "<style>";
     // Add consistent styling
     htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; }";
@@ -535,6 +537,7 @@ String prepare_Fire_Control_Page() {
     htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
     htmlPage += "<TITLE>Fire Control Panel</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<meta charset='UTF-8'>";
     htmlPage += "<style>";
     // Base styling
     htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; text-align: center; }";
@@ -645,7 +648,7 @@ String prepare_Fire_Control_Page() {
     htmlPage += "</HEAD><BODY>";
 
     // Main fire control button
-    htmlPage += "<button id='fireButton' class='fire-button' onclick='return fireTrigger();'>🎯 FIRE! 🎯</button>";
+    htmlPage += "<button id='fireButton' class='fire-button' onclick='return fireTrigger();'>FIRE!</button>";
 
     // Status boxes
     htmlPage += "<div class='data-box'>";
@@ -683,6 +686,7 @@ String prepare_Fire_Settings_Page() {
     htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
     htmlPage += "<TITLE>Saloon Doors Settings</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<meta charset='UTF-8'>";
     htmlPage += "<style>";
     // Base styling to match other pages
     htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; }";
@@ -854,6 +858,7 @@ String prepare_Stats_Page() {
     htmlPage += "<!DOCTYPE HTML><HTML><HEAD>";
     htmlPage += "<TITLE>System Statistics</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    htmlPage += "<meta charset='UTF-8'>";
     htmlPage += "<style>";
     // Match the data page styling
     htmlPage += "body { font-size:200%; background-color:black; color:white; padding: 20px; }";
