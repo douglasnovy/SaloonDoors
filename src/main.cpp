@@ -721,11 +721,11 @@ void handle_Data_Status() {
     json += "\"fireTimer\":" + String(state.fireTimer, 2) + ",";
     json += "\"fireTimeLimit\":" + String(state.fireTimeLimit, 2) + ",";
     json += "\"remoteTriggerState\":" + String(state.remoteTriggerState) + ",";
-    json += "\"localTriggerState1\":" + String(digitalRead(state.MANUAL_TRIGGER_1)) + ",";
-    json += "\"localTriggerState2\":" + String(digitalRead(state.MANUAL_TRIGGER_2)) + ",";
+    json += "\"localTriggerState1\":" + String(state.localTriggerState1) + ",";
+    json += "\"localTriggerState2\":" + String(state.localTriggerState2) + ",";
     json += "\"fireOn\":" + String(state.fireOn) + ",";
-    json += "\"accel1\":" + String(state.accel1[7], 3) + ",";  // Using 3 decimal places for more precision
-    json += "\"accel2\":" + String(state.accel2[7], 3) + ",";  // Using 3 decimal places for more precision
+    json += "\"accel1\":" + String(state.accel1[7], 3) + ",";
+    json += "\"accel2\":" + String(state.accel2[7], 3) + ",";
     json += "\"aveGyro\":" + String(state.aveGyro, 2);
     json += "}";
     state.server.send(200, "application/json", json);
@@ -1243,6 +1243,12 @@ void loop() {
             state.resetTimer += state.loopRate;
             // Add logging for reset period
             logFireStatus(0, "Reset");  // Duration is 0 during reset period
+            
+            // Add this check to update resetState when timer completes
+            if (state.resetTimer >= state.resetLimit) {
+                state.resetState = 1;
+                Serial.println("Reset complete - system ready");
+            }
         }
         
         // Update memory usage statistics
