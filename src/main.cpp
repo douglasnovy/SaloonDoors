@@ -1080,7 +1080,7 @@ void handleResetDefaults() {
 }
 
 void handle_Data_Status() {
-    char json[512];  // Static buffer instead of String
+    static char json[512];  // Make static to avoid stack fragmentation
     snprintf(json, sizeof(json),
         "{"
         "\"resetTimer\":%.2f,"
@@ -1232,7 +1232,7 @@ void handle_Settings_Reset() {
 }
 
 void handle_Fire_Status() {
-    char json[256];
+    static char json[256];  // Make static to avoid stack fragmentation
     snprintf(json, sizeof(json),
         "{"
         "\"fireOn\":%d,"
@@ -1528,6 +1528,9 @@ void setup() {
 }
 
 void loop() {
+    // Add at start of loop
+    ESP.wdtFeed();  // Reset watchdog timer
+    
     // Process network requests frequently
     static unsigned long lastNetworkUpdate = 0;
     static unsigned long lastUpdate = 0;
@@ -1536,6 +1539,11 @@ void loop() {
     const unsigned long updateInterval = state.loopRate * 1000000; // Convert to microseconds
     
     unsigned long currentMicros = micros();
+    
+    // Handle timer rollovers for intervals
+    if (currentMicros < lastNetworkUpdate) lastNetworkUpdate = 0;
+    if (currentMicros < lastUpdate) lastUpdate = 0;
+    if (currentMicros < lastFireCycleUpdate) lastFireCycleUpdate = 0;
     
     // Handle network with minimum interval
     if (currentMicros - lastNetworkUpdate >= networkInterval) {
@@ -1593,21 +1601,25 @@ void loop() {
         // Fire control logic
         if (state.fireOn) {
             // Only check fire cycle timing if cycle is enabled
-            if (state.fireCycle > 0 && currentMicros - lastFireCycleUpdate >= (state.fireCycle * 1000000)) {
-                lastFireCycleUpdate = currentMicros;
-                state.fireCycleToggle = !state.fireCycleToggle;
-                
-                // Update pins based on cycle state
-                digitalWrite(state.FIRE_PIN_1, state.fireCycleToggle ? HIGH : LOW);
-                digitalWrite(state.FIRE_PIN_2, state.fireCycleToggle ? LOW : HIGH);
-                state.firePinState1 = state.fireCycleToggle;
-                state.firePinState2 = !state.fireCycleToggle;
-            } else if (state.fireCycle == 0) {
+            if (state.fireCycle == 0) {
                 // When fireCycle is 0, fire both pins simultaneously
                 digitalWrite(state.FIRE_PIN_1, HIGH);
                 digitalWrite(state.FIRE_PIN_2, HIGH);
                 state.firePinState1 = true;
                 state.firePinState2 = true;
+            } else {
+                unsigned long cycleInterval = state.fireCycle * 1000000;
+                if (currentMicros - lastFireCycleUpdate >= cycleInterval) {
+                    // Update lastFireCycleUpdate more precisely
+                    lastFireCycleUpdate += cycleInterval;  // Use += instead of = for better timing
+                    state.fireCycleToggle = !state.fireCycleToggle;
+                    
+                    // Update pins based on cycle state
+                    digitalWrite(state.FIRE_PIN_1, state.fireCycleToggle ? HIGH : LOW);
+                    digitalWrite(state.FIRE_PIN_2, state.fireCycleToggle ? LOW : HIGH);
+                    state.firePinState1 = state.fireCycleToggle;
+                    state.firePinState2 = !state.fireCycleToggle;
+                }
             }
             
             // Check fire duration
