@@ -298,8 +298,8 @@ String prepare_Root_Page()
             "<meta http-equiv='Expires' content='0'>" +
             "<TITLE>Saloon Doors Root</TITLE>" +
             "</HEAD>" +
-            "<BODY style='font-size:300%;background-color:black;color:white'>" +
-            "<h2>&#128293 <u>HighNoon</u> &#128293</h2>" +
+            "<BODY style='font-size:225%;background-color:black;color:white'>" +
+            "<h2>&#128293<u>HighNoon</u>&#128293</h2>" +
             "<br>" +
             "<p><a href='/'>Root Page</a></p>" +
             "<p><a href='/settings'>Settings Control Page</a></p>" +
@@ -562,7 +562,7 @@ String prepare_Stats_Page() {
     htmlPage += "<TITLE>System Statistics</TITLE>";
     htmlPage += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
     htmlPage += "<style>";
-    htmlPage += "body { font-size:300%; background-color:black; color:white; }";
+    htmlPage += "body { font-size:200%; background-color:black; color:white; }";
     htmlPage += ".stat-box { background-color:#333; padding:15px; margin:10px; border-radius:5px; }";
     htmlPage += ".reset-btn { background-color:#ff4444; color:white; padding:15px; border:none; border-radius:5px; font-size:100%; cursor:pointer; }";
     htmlPage += "</style>";
